@@ -31,6 +31,9 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+        env:
+          # onnxruntime-node (used only by local scripts) would otherwise fetch CUDA binaries on Linux.
+          ONNXRUNTIME_NODE_INSTALL: skip
       - run: npm test
       - run: npm run build
         env:

@@ -84,7 +84,11 @@ async function load(id: number, modelUrl: string): Promise<void> {
     throw new Error("WebGPU is not available in this browser.");
   }
   const base = modelUrl.endsWith("/") ? modelUrl : modelUrl + "/";
-  const manifest: Manifest = await (await fetch(base + "manifest.json", { cache: "no-cache" })).json();
+  const manifestResponse = await fetch(base + "manifest.json", { cache: "no-cache" });
+  if (!manifestResponse.ok) {
+    throw new Error(`no model files at ${base} (HTTP ${manifestResponse.status} for manifest.json)`);
+  }
+  const manifest: Manifest = await manifestResponse.json();
   const cache = await openCache();
   const total = MODEL_FILES.reduce((sum, file) => sum + (manifest.files[file] ?? 0), 0);
   let received = 0;

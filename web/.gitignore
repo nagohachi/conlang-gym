@@ -2,3 +2,5 @@ node_modules/
 dist/
 # Exported model (web/scripts/export_onnx.py); served by the dev and preview servers only.
 models/
+# The root .gitignore's ENV/ (Python virtualenvs) also matches src/env/ on case-insensitive file systems.
+!src/env/

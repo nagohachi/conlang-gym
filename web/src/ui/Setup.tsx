@@ -13,7 +13,7 @@ const CUSTOM_FIELDS: { key: keyof EnvConfig; label: string; min: number; max: nu
   { key: "numActiveParams", label: "Grammar features besides word order", min: 0, max: 5 },
   { key: "budget", label: "Questions", min: 1, max: 30 },
   { key: "numTest", label: "Test sentences", min: 1, max: 20 },
-  { key: "numCompositional", label: "…of which combine two or more marked features", min: 0, max: 20 },
+  { key: "numCompositional", label: "Test sentences combining plural and past", min: 0, max: 20 },
   { key: "numNouns", label: "Nouns", min: 2, max: 10 },
   { key: "numTransitive", label: "Transitive verbs", min: 1, max: 6 },
   { key: "numIntransitive", label: "Intransitive verbs", min: 1, max: 4 },

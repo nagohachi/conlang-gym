@@ -1,0 +1,29 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["libs"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # Pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade (e.g. Callable from collections.abc)
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "N",    # pep8-naming
+    "ANN",  # flake8-annotations: every parameter and return value is annotated
+    "D101", "D102", "D103", "D105", "D107",  # pydocstyle: every class, function and method has a docstring
+    "D401", # pydocstyle: a docstring starts with a verb in the imperative ("Return", not "Returns")
+    "TID",  # flake8-tidy-imports: the banned APIs below
+    "T20",  # flake8-print: log with logging instead of print
+    "RUF",  # Ruff-specific rules
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"__future__.annotations".msg = "Python 3.12 evaluates annotations without it."
+"typing.Any".msg = "Write the concrete type (conlang_gym.agent_loop.JsonValue for values verl passes through)."
+
+[tool.ruff.lint.isort]
+known-first-party = ["conlang_gym"]

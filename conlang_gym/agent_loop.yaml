@@ -1,0 +1,18 @@
+# turn_max_tokens is L (spec 5.4): a longer investigation turn is a format error.
+# test_max_tokens bounds the test answer: a longer one scores 0 (spec 7.3).
+# Without thinking mode Qwen3.5-2B still reasons in plain text; with a 512-token answer limit 34% of
+# step-1 episodes were cut off before writing any <answer>, hence the larger limits.
+- name: conlang_gym_agent
+  _target_: conlang_gym.agent_loop.ConlangGymAgentLoop
+  turn_max_tokens: 512
+  test_max_tokens: 2048
+# Thinking mode. Without a budget, greedy Qwen3.5-2B used up 1,024 tokens per turn and 3,072 for the test
+# answer on nearly every validation episode (invalid actions 5.996 of 6, test answers truncated 96.5%, reward
+# 0.0). So the reasoning is capped (think_budget_*) and then closed by the environment (Qwen3 thinking-budget
+# scheme); turn/test_max_tokens bound the visible part written after </think>.
+- name: conlang_gym_agent_think
+  _target_: conlang_gym.agent_loop.ConlangGymAgentLoop
+  think_budget_turn: 512
+  think_budget_test: 1024
+  turn_max_tokens: 128
+  test_max_tokens: 512

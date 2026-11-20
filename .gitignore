@@ -221,3 +221,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# conlang-gym: generated data, logs, checkpoints, rollouts and wandb runs
+outputs/
+wandb/

@@ -14,6 +14,7 @@ Trained model: [nagohachi/Qwen3.5-2B-conlang-gym-v1-word-order-with-dictionary](
 | `conlang_gym/agent_loop.py`, `agent_loop.yaml` | agent loop that runs one episode, with an optional thinking budget |
 | `scripts/train_qwen3_5_2b.sh` | GRPO training |
 | `scripts/analyze_validation.py` | Outputs the word orders the model wrote (from validation dumps) and its accuracy |
+| `web/` | Website: play episodes yourself, or watch the trained model play them in the browser (WebGPU); see [web/README.md](web/README.md) |
 | `libs/verl` | A copy of verl (see below) |
 
 ## Setup
@@ -51,6 +52,10 @@ Metrics go to wandb (project `conlang_gym`), and checkpoints, rollouts and valid
 ```bash
 python scripts/analyze_validation.py outputs/val_generations/qwen3_5_2b_nothink
 ```
+
+## Website
+
+`web/` is a static site with a TypeScript port of the environment (same seeds, same languages) and the trained model, quantized to 4 bits and run on the visitor's GPU with onnxruntime-web. A person can play an episode, or let the model play it. See [web/README.md](web/README.md) for development, the model export and deployment.
 
 ## libs/verl
 

@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# Exported model (web/scripts/export_onnx.py); served by the dev and preview servers only.
+models/

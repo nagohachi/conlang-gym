@@ -491,6 +491,12 @@ details > summary {
   font: 600 12px/1.3 var(--mono);
   color: var(--ink-3);
 }
+/* Items of a status line, spaced apart instead of separated by a character. */
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 14px;
+}
 .turn.truncated .turn-head {
   color: var(--warn);
 }

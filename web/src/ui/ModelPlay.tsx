@@ -102,9 +102,12 @@ export function ModelPlay({
           <div class="card-head">
             <h2 id="model-title">The model's investigation</h2>
             {run && (
-              <span class="budget" aria-live="polite">
-                {episode.inTestPhase ? "test" : `${episode.budgetLeft} question${episode.budgetLeft === 1 ? "" : "s"} left`}
-                {totalMs > 0 && ` · ${totalTokens} tokens · ${((totalTokens / totalMs) * 1000).toFixed(1)} tok/s`}
+              <span class="budget meta" aria-live="polite">
+                <span>
+                  {episode.inTestPhase ? "test" : `${episode.budgetLeft} question${episode.budgetLeft === 1 ? "" : "s"} left`}
+                </span>
+                {totalMs > 0 && <span>{totalTokens} tokens</span>}
+                {totalMs > 0 && <span>{((totalTokens / totalMs) * 1000).toFixed(1)} tok/s</span>}
               </span>
             )}
           </div>
@@ -125,8 +128,9 @@ export function ModelPlay({
               ))}
               {run.live && (
                 <li class="turn live">
-                  <div class="turn-head">
-                    {run.live.inTest ? "Test answer" : `Turn ${run.live.index + 1}`} · {run.live.numTokens} tokens
+                  <div class="turn-head meta">
+                    <span>{run.live.inTest ? "Test answer" : `Turn ${run.live.index + 1}`}</span>
+                    <span>{run.live.numTokens} tokens</span>
                   </div>
                   <pre class="model-text">
                     {run.live.text.replace(SPECIAL_TOKEN_RE, "")}
@@ -166,9 +170,11 @@ export function ModelPlay({
 function TurnView({ turn }: { turn: Turn }) {
   return (
     <li class={`turn${turn.truncated ? " truncated" : ""}`}>
-      <div class="turn-head">
-        {turn.inTest ? "Test answer" : `Turn ${turn.index + 1}`} · {turn.numTokens} tokens ·{" "}
-        {(turn.durationMs / 1000).toFixed(1)} s{turn.truncated && " · cut off at the token limit"}
+      <div class="turn-head meta">
+        <span>{turn.inTest ? "Test answer" : `Turn ${turn.index + 1}`}</span>
+        <span>{turn.numTokens} tokens</span>
+        <span>{(turn.durationMs / 1000).toFixed(1)} s</span>
+        {turn.truncated && <span>cut off at the token limit</span>}
       </div>
       <pre class="model-text">{turn.text}</pre>
       {turn.reply !== undefined && <EnvReply reply={turn.reply} />}

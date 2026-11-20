@@ -122,37 +122,13 @@ h4 {
 
 /* How it works */
 .how ol {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin: 0 0 20px;
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
+  max-width: 68ch;
+  margin: 0 0 24px;
+  padding-left: 1.3em;
+  color: var(--ink-2);
 }
 .how li {
-  counter-increment: step;
-  padding: 14px 16px 14px 46px;
-  position: relative;
-  border-top: 2px solid var(--line);
-  color: var(--ink-2);
-  font-size: 15px;
-}
-.how li::before {
-  content: counter(step);
-  position: absolute;
-  left: 12px;
-  top: 14px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font: 700 13px/24px var(--sans);
-  text-align: center;
-}
-.how strong {
-  color: var(--ink);
+  margin-bottom: 6px;
 }
 
 /* Cards and layout */
@@ -660,10 +636,6 @@ details > summary {
   }
   .play-side {
     position: static;
-  }
-  .how ol {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
   }
 }
 @media (max-width: 640px) {

@@ -34,9 +34,9 @@ export function App() {
           <p class="eyebrow">conlang-gym</p>
           <h1>Learn a language from one informant and a handful of questions</h1>
           <p class="lede">
-            Every seed generates a small artificial language. Ask a native speaker how to say a few
-            meanings, work out the grammar, then translate sentences you have never heard. Play it
-            yourself, or watch a 2B-parameter model trained with reinforcement learning do it.
+            conlang-gym is a game where you work out a small made-up language. You can play it
+            yourself, or watch a 2B-parameter model play it. The model was trained on this game with
+            reinforcement learning.
           </p>
         </div>
       </header>
@@ -60,20 +60,21 @@ export function App() {
 
 function HowItWorks() {
   return (
-    <section class="how" aria-label="How it works">
+    <section class="how" aria-labelledby="how-title">
+      <h2 id="how-title">How to play</h2>
       <ol>
         <li>
-          <strong>A seed fixes a language.</strong> Its word order is one of SOV, SVO, VSO, VOS, OSV or
-          OVS; harder settings add affixes for plural, past tense, object case, agreement and vowel
-          harmony.
+          You get the nouns and verbs of the language, and by default the root of each. The subject,
+          object and verb always appear in the same order, which differs from language to language
+          (SOV, SVO, VSO, VOS, OSV or OVS). On harder settings, words also take affixes.
         </li>
         <li>
-          <strong>Ask the informant.</strong> Each question names a meaning (who does what to whom,
-          singular or plural, present or past) and the informant says it in the language.
+          Each question names a meaning, such as “the dogs chased the cat”, and the informant says it
+          in the language. You have six questions by default.
         </li>
         <li>
-          <strong>Translate the test.</strong> Then come meanings you have not heard. Only exact
-          sentences count, and test items you happened to ask about are not scored.
+          Then you translate meanings you have not heard. An answer counts only if it is exactly the
+          sentence the informant would say. Test items you already asked about are not scored.
         </li>
       </ol>
     </section>

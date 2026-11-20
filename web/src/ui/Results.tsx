@@ -17,9 +17,10 @@ function describeGrammar(episode: Episode): string[] {
   const place = (position: string, name: string) =>
     position === "prefix" ? `prefix ${form(name)}-` : `suffix -${form(name)}`;
   const order = grammar.wordOrder;
-  const intransitive = order.indexOf("S") < order.indexOf("V") ? "subject verb" : "verb subject";
+  const intransitive =
+    order.indexOf("S") < order.indexOf("V") ? "the subject before the verb" : "the verb before the subject";
   const lines = [
-    `Word order ${order}: ${[...order].map((r) => ORDER_NAMES[r]).join(" – ")} (intransitive: ${intransitive}).`,
+    `The word order is ${[...order].map((r) => ORDER_NAMES[r]).join(", ")} (${order}). Intransitive sentences put ${intransitive}.`,
   ];
   if (grammar.plural !== "none") lines.push(`Plural nouns take the ${place(grammar.plural, "plural")}.`);
   if (grammar.objectMarking !== "none") lines.push(`Objects take the ${place("suffix", "object")}.`);

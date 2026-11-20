@@ -131,8 +131,9 @@ export function Setup({ game, onStart }: Props) {
         </div>
         {!custom ? (
           <p class="hint">
-            Word order only, root dictionary shown, {TRAINING_CONFIG.budget} questions,{" "}
-            {TRAINING_CONFIG.numTest} test sentences: the setting the model was trained on.
+            The model was trained with these settings. Languages differ only in word order, the root
+            dictionary is shown, and there are {TRAINING_CONFIG.budget} questions and{" "}
+            {TRAINING_CONFIG.numTest} test sentences.
           </p>
         ) : (
           <div class="custom-grid">

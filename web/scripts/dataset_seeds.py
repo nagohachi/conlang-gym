@@ -1,7 +1,7 @@
 """Write the seed selection of the published model's dataset to web/src/env/dataset_seeds.json.
 
 It replays conlang_gym/make_dataset.py's selection, without pandas and without writing parquet
-files, for the command in README.md: --num_active_params 0 and every other flag at its default
+files, for the command in README.md: every flag at its default, so word order only
 (8000 train rows, 64 validation seeds per grammar, unseen grammar fraction 0.2, chunks of 2000
 seeds). Run from the repository root:
     PYTHONPATH=. python web/scripts/dataset_seeds.py
@@ -36,13 +36,20 @@ CAMEL_CASE = {
     "num_nouns": "numNouns",
     "num_transitive": "numTransitive",
     "num_intransitive": "numIntransitive",
-    "num_active_params": "numActiveParams",
+    "active_params": "activeParams",
     "show_dictionary": "showDictionary",
     "enable_judge": "enableJudge",
     "budget": "budget",
     "num_test": "numTest",
     "num_compositional": "numCompositional",
+    "solver_params": "solverParams",
 }
+
+
+def to_camel_case(name: str) -> str:
+    """Return a snake_case name in camelCase, as the TypeScript port names fields and parameters."""
+    first, *rest = name.split("_")
+    return first + "".join(part.capitalize() for part in rest)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -71,7 +78,8 @@ def build_grammar_label(grammar: Grammar) -> str:
         f"{p}-{getattr(grammar, p)}" for p in OPTIONAL_PARAMS if getattr(grammar, p) != "none"
     ]
     parts = [grammar.word_order, *active]
-    if grammar.object_marking == "suffix" and grammar.plural == "suffix":
+    has_case_suffix = "suffix" in (grammar.object_marking, grammar.ergative_marking)
+    if has_case_suffix and grammar.plural == "suffix":
         parts.append(grammar.plural_case_order)
     return "_".join(parts)
 
@@ -79,19 +87,19 @@ def build_grammar_label(grammar: Grammar) -> str:
 def main() -> None:
     """Replay make_dataset's seed selection and write the summary the website needs."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--num_active_params", type=int, default=0)
+    parser.add_argument("--active_params", nargs="*", default=[])
     parser.add_argument("--num_workers", type=int, default=8)
     parser.add_argument("--out", type=Path, default=OUT_PATH)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    config = EnvConfig(num_active_params=args.num_active_params)
+    config = EnvConfig(active_params=tuple(args.active_params))
 
     grammars = sorted(
         (
             grammar
             for grammar in ALL_GRAMMARS
-            if sum(getattr(grammar, p) != "none" for p in OPTIONAL_PARAMS)
-            == config.num_active_params
+            if {p for p in OPTIONAL_PARAMS if getattr(grammar, p) != "none"}
+            == set(config.active_params)
         ),
         key=build_grammar_key,
     )
@@ -140,7 +148,12 @@ def main() -> None:
             )
 
     summary = {
-        "envConfig": {CAMEL_CASE[name]: value for name, value in asdict(config).items()},
+        "envConfig": {
+            CAMEL_CASE[name]: [to_camel_case(p) for p in value]
+            if isinstance(value, tuple)
+            else value
+            for name, value in asdict(config).items()
+        },
         "seenGrammars": sorted(map(build_grammar_label, seen)),
         "unseenGrammars": sorted(map(build_grammar_label, unseen)),
         "valSeen": dict(sorted(val_seeds["val_seen"].items())),

@@ -3,11 +3,14 @@
 export { PyRandom, type PySeed } from "./pyrandom";
 export {
   AFFIX_NAMES,
+  AFFIX_PARAMS,
   CONSONANTS,
+  COVERAGE_CONDITIONS,
   DEFAULT_ENV_CONFIG,
   ERROR_FORMAT,
   ERROR_RANGE,
   ERROR_TYPE,
+  EXTRA_AFFIX_PARAMS,
   Episode,
   type EnvConfig,
   type EpisodeGrade,
@@ -50,6 +53,7 @@ export {
   normalize,
   parseAction,
   parseAnswers,
+  pluralStemKey,
   pyStrip,
   validateEnvConfig,
 } from "./language";
@@ -60,6 +64,7 @@ export {
   type SolveOptions,
   type SolverTurn,
   grammarIndex,
+  listGrammars,
   pySum,
   solve,
 } from "./solver";

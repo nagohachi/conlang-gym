@@ -34,7 +34,7 @@ import {
 // Fixture types and helpers
 
 type PyMeaning = [string, string, string, string, string | null, string | null];
-type PyConfig = Record<string, number | boolean>;
+type PyConfig = Record<string, number | boolean | string[]>;
 type PyScore = Record<string, number>;
 
 function load<T>(name: string): T {
@@ -56,6 +56,7 @@ function fromMeaning(m: Meaning): PyMeaning {
 function scoreToPython(score: EpisodeScore): PyScore {
   return {
     reward: score.reward,
+    coverage: score.coverage,
     num_asks: score.numAsks,
     num_judges: score.numJudges,
     num_invalid: score.numInvalid,

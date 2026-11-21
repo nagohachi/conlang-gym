@@ -3,11 +3,16 @@ import { DATASET_SEEDS, datasetSplitOf, type EnvConfig, makeEnvConfig, PY_CONFIG
 
 export type Mode = "human" | "model";
 
-/** The published model's data: make_dataset.py --num_active_params 0, the rest at defaults. */
-export const TRAINING_CONFIG: EnvConfig = makeEnvConfig({ numActiveParams: 0 });
+/** The published model's data: make_dataset.py with every flag at its default (word order only). */
+export const TRAINING_CONFIG: EnvConfig = makeEnvConfig({ activeParams: [] });
 
 export function sameConfig(a: EnvConfig, b: EnvConfig): boolean {
-  return (Object.keys(PY_CONFIG_NAMES) as (keyof EnvConfig)[]).every((key) => a[key] === b[key]);
+  // Parameter lists are compared as sets: their order does not change the languages.
+  const normalize = (value: EnvConfig[keyof EnvConfig]) =>
+    Array.isArray(value) ? JSON.stringify([...value].sort()) : value;
+  return (Object.keys(PY_CONFIG_NAMES) as (keyof EnvConfig)[]).every(
+    (key) => normalize(a[key]) === normalize(b[key]),
+  );
 }
 
 /**

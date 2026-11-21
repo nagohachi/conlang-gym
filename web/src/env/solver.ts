@@ -14,8 +14,10 @@ import {
   Grammar,
   type Meaning,
   type Morpheme,
+  OPTIONAL_PARAMS,
   PARAM_CHOICES,
   PARAM_NAMES,
+  type ParamName,
   type Template,
   buildSentenceTemplate,
   generate,
@@ -52,9 +54,22 @@ function buildAllGrammars(): Grammar[] {
   return [...unique.values()].sort(compareGrammars);
 }
 
-/** Every canonical grammar, sorted by its field values (498 grammars). */
+/** Every canonical grammar, sorted by its field values (5,598 grammars). */
 export const ALL_GRAMMARS: readonly Grammar[] = Object.freeze(buildAllGrammars());
 const GRAMMAR_INDEX = new Map(ALL_GRAMMARS.map((grammar, i) => [grammar.key(), i]));
+const GRAMMAR_LISTS = new Map<string, readonly Grammar[]>();
+
+/** Return the grammars of ALL_GRAMMARS whose switched-on parameters are all in params. */
+export function listGrammars(params: readonly ParamName[]): readonly Grammar[] {
+  const key = [...params].sort().join("|");
+  let grammars = GRAMMAR_LISTS.get(key);
+  if (grammars === undefined) {
+    const off = OPTIONAL_PARAMS.filter((name) => !params.includes(name));
+    grammars = Object.freeze(ALL_GRAMMARS.filter((g) => off.every((name) => g[name] === "none")));
+    GRAMMAR_LISTS.set(key, grammars);
+  }
+  return grammars;
+}
 
 // The templates of each meaning, per index in ALL_GRAMMARS (Python caches them with lru_cache).
 // Templates are never mutated, so sharing them is safe; the cache is cleared when it grows large.
@@ -125,17 +140,22 @@ export interface Hypothesis {
 export class HypothesisSolver {
   hypotheses: Hypothesis[];
 
+  /** The root dictionary ({} if it is hidden); a root missing from it is read off observations. */
+  readonly knownRoots: Readonly<Record<string, string>>;
+
   /**
-   * Start from every canonical grammar; knownRoots is null if the dictionary is hidden. log is the
+   * Start from grammars; knownRoots is the root dictionary (null if it is hidden). log is the
    * natural logarithm the entropies use (correctly rounded, like the C library's log).
    */
   constructor(
-    readonly knownRoots: Readonly<Record<string, string>> | null,
+    knownRoots: Readonly<Record<string, string>> | null,
+    grammars: readonly Grammar[],
     private readonly log: (x: number) => number = crLog,
   ) {
-    this.hypotheses = ALL_GRAMMARS.map((grammar, grammarIndex) => ({
+    this.knownRoots = knownRoots ?? {};
+    this.hypotheses = grammars.map((grammar) => ({
       grammar,
-      grammarIndex,
+      grammarIndex: GRAMMAR_INDEX.get(grammar.key())!,
       bindings: new Map(),
     }));
   }
@@ -165,7 +185,7 @@ export class HypothesisSolver {
           const slot = wordTemplate[m]!;
           let piece = pieces[m]!;
           let expected: string | undefined;
-          if (slot.isRoot && knownRoots !== null) {
+          if (slot.isRoot && Object.hasOwn(knownRoots, slot.name)) {
             expected = knownRoots[slot.name];
           } else if (!slot.isRoot && harmony === "copy") {
             if (piece[1] !== rootPiece[rootPiece.length - 1]) return false;
@@ -218,10 +238,9 @@ export class HypothesisSolver {
       const words: string[] = [];
       for (const wordTemplate of template) {
         const rootName = wordTemplate.find((slot) => slot.isRoot)!.name;
-        const root =
-          knownRoots !== null
-            ? knownRoots[rootName]!
-            : (bindings.get(morpheme(true, rootName)) ?? null);
+        const root = Object.hasOwn(knownRoots, rootName)
+          ? knownRoots[rootName]!
+          : (bindings.get(morpheme(true, rootName)) ?? null);
         let pieces = "";
         for (const slot of wordTemplate) {
           let form: string | null;
@@ -330,8 +349,13 @@ export function solve(
 ): number | null {
   const onTurn = options.onTurn;
   const { language, tests } = generate(seed, config);
+  const dictionary: Record<string, string> = {};
+  for (const concept of [...language.nouns, ...language.transitive, ...language.intransitive]) {
+    dictionary[concept] = language.roots[concept]!;
+  }
   const solver = new HypothesisSolver(
-    config.showDictionary ? { ...language.roots } : null,
+    config.showDictionary ? dictionary : null,
+    listGrammars(config.solverParams),
     options.log,
   );
   const rng = new PyRandom(BigInt(seed) * 7919n + 1n);

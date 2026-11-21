@@ -48,7 +48,7 @@ class ScriptedBackend implements LlmBackend {
   }
 }
 
-const config = makeEnvConfig({ numActiveParams: 0 });
+const config = makeEnvConfig({ activeParams: [] });
 
 describe("visibleText", () => {
   it("keeps the text after the last </think> without special tokens", () => {

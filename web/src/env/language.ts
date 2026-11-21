@@ -37,6 +37,9 @@ export const PARAM_CHOICES = {
   past: ["none", "suffix", "prefix"],
   subjectAgreement: ["none", "suffix"],
   vowelHarmony: ["none", "copy"],
+  ergativeMarking: ["none", "suffix"],
+  objectPlural: ["none", "distinct"],
+  verbNumberStem: ["none", "subject", "absolutive"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type ParamName = keyof typeof PARAM_CHOICES;
@@ -49,6 +52,9 @@ export const PARAM_NAMES: readonly ParamName[] = [
   "past",
   "subjectAgreement",
   "vowelHarmony",
+  "ergativeMarking",
+  "objectPlural",
+  "verbNumberStem",
 ];
 /** The Python name of each parameter, as grammar labels and Python JSON use it. */
 export const PY_PARAM_NAMES: Readonly<Record<ParamName, string>> = {
@@ -59,6 +65,9 @@ export const PY_PARAM_NAMES: Readonly<Record<ParamName, string>> = {
   past: "past",
   subjectAgreement: "subject_agreement",
   vowelHarmony: "vowel_harmony",
+  ergativeMarking: "ergative_marking",
+  objectPlural: "object_plural",
+  verbNumberStem: "verb_number_stem",
 };
 // Parameters that can be switched on in addition to word order, which is always active.
 export const OPTIONAL_PARAMS: readonly ParamName[] = [
@@ -67,8 +76,30 @@ export const OPTIONAL_PARAMS: readonly ParamName[] = [
   "past",
   "subjectAgreement",
   "vowelHarmony",
+  "ergativeMarking",
+  "objectPlural",
+  "verbNumberStem",
 ];
+// Parameters that put an affix on a word; vowel harmony is only visible with one of them.
+export const AFFIX_PARAMS: readonly ParamName[] = [
+  "objectMarking",
+  "plural",
+  "past",
+  "subjectAgreement",
+  "ergativeMarking",
+];
+// Affixes every language has a form for, whether or not its grammar uses them.
 export const AFFIX_NAMES = ["plural", "object", "past", "agreement"] as const;
+// Affixes a language has only when its grammar uses them, with the parameter that does.
+export const EXTRA_AFFIX_PARAMS: readonly (readonly [string, ParamName])[] = [
+  ["ergative", "ergativeMarking"],
+  ["object_plural", "objectPlural"],
+];
+
+/** Return the key of a verb's second stem in Language.roots, used under verbNumberStem. */
+export function pluralStemKey(verb: string): string {
+  return `${verb}.plural`;
+}
 
 export const TRANSITIVE_SLOTS = [
   "Subject",
@@ -163,9 +194,20 @@ export interface GrammarFields {
   readonly past: string;
   readonly subjectAgreement: string;
   readonly vowelHarmony: string;
+  readonly ergativeMarking: string;
+  readonly objectPlural: string;
+  readonly verbNumberStem: string;
 }
 
-/** One value per grammatical parameter (spec 3.3); "none" switches a parameter off. */
+/**
+ * One value per grammatical parameter (spec 3.3); "none" switches a parameter off.
+ *
+ * A is the subject of a transitive verb, S the subject of an intransitive verb and O the object.
+ * objectMarking puts a case suffix on O and ergativeMarking one on A (with both, the marking is
+ * tripartite). objectPlural gives O its own plural affix, in the position plural gives. Under
+ * verbNumberStem the verb has a second stem, used when the subject (S or A) is plural, or when
+ * the absolutive argument (S or O) is plural.
+ */
 export class Grammar implements GrammarFields {
   readonly wordOrder: string;
   readonly objectMarking: string;
@@ -174,6 +216,9 @@ export class Grammar implements GrammarFields {
   readonly past: string;
   readonly subjectAgreement: string;
   readonly vowelHarmony: string;
+  readonly ergativeMarking: string;
+  readonly objectPlural: string;
+  readonly verbNumberStem: string;
 
   constructor(fields: Partial<GrammarFields> = {}) {
     this.wordOrder = fields.wordOrder ?? "SVO";
@@ -183,17 +228,20 @@ export class Grammar implements GrammarFields {
     this.past = fields.past ?? "none";
     this.subjectAgreement = fields.subjectAgreement ?? "none";
     this.vowelHarmony = fields.vowelHarmony ?? "none";
+    this.ergativeMarking = fields.ergativeMarking ?? "none";
+    this.objectPlural = fields.objectPlural ?? "none";
+    this.verbNumberStem = fields.verbNumberStem ?? "none";
     Object.freeze(this);
   }
 
   /** Return whether any parameter puts an affix on a word. */
   hasAffix(): boolean {
-    return (
-      this.objectMarking !== "none" ||
-      this.plural !== "none" ||
-      this.past !== "none" ||
-      this.subjectAgreement !== "none"
-    );
+    return AFFIX_PARAMS.some((name) => this[name] !== "none");
+  }
+
+  /** Return whether a case suffix (accusative or ergative) exists. */
+  hasCaseSuffix(): boolean {
+    return this.objectMarking === "suffix" || this.ergativeMarking === "suffix";
   }
 
   /**
@@ -202,7 +250,7 @@ export class Grammar implements GrammarFields {
    * Two canonical grammars are equal exactly when they realize every meaning the same way.
    */
   toCanonical(): Grammar {
-    const orderMatters = this.objectMarking === "suffix" && this.plural === "suffix";
+    const orderMatters = this.hasCaseSuffix() && this.plural === "suffix";
     return new Grammar({
       wordOrder: this.wordOrder,
       objectMarking: this.objectMarking,
@@ -211,6 +259,9 @@ export class Grammar implements GrammarFields {
       past: this.past,
       subjectAgreement: this.subjectAgreement,
       vowelHarmony: this.hasAffix() ? this.vowelHarmony : "none",
+      ergativeMarking: this.ergativeMarking,
+      objectPlural: this.plural !== "none" ? this.objectPlural : "none",
+      verbNumberStem: this.verbNumberStem,
     });
   }
 
@@ -234,7 +285,7 @@ export class Grammar implements GrammarFields {
     for (const name of OPTIONAL_PARAMS) {
       if (this[name] !== "none") parts.push(`${PY_PARAM_NAMES[name]}-${this[name]}`);
     }
-    if (this.objectMarking === "suffix" && this.plural === "suffix") {
+    if (this.hasCaseSuffix() && this.plural === "suffix") {
       parts.push(this.pluralCaseOrder);
     }
     return parts.join("_");
@@ -255,29 +306,45 @@ export class Grammar implements GrammarFields {
   }
 }
 
-/** Difficulty settings (spec 10); the defaults are the Qwen3.5-2B initial settings (spec 11). */
+/**
+ * Difficulty settings (spec 10); the defaults are those of the published word-order model.
+ *
+ * activeParams names the parameters switched on in every language, besides word order; each one
+ * takes a random non-"none" value per seed (e.g. past is a suffix in some languages and a prefix
+ * in others). solverParams names the parameters the solver treats as possibly switched on when it
+ * checks that a seed can be solved (spec 8); the default, the five parameters of spec v0.1,
+ * reproduces the data of the published models.
+ */
 export interface EnvConfig {
   readonly numNouns: number;
   readonly numTransitive: number;
   readonly numIntransitive: number;
-  readonly numActiveParams: number;
+  readonly activeParams: readonly ParamName[];
   readonly showDictionary: boolean;
   readonly enableJudge: boolean;
   readonly budget: number;
   readonly numTest: number;
   readonly numCompositional: number;
+  readonly solverParams: readonly ParamName[];
 }
 
 export const DEFAULT_ENV_CONFIG: EnvConfig = Object.freeze({
   numNouns: 4,
   numTransitive: 2,
   numIntransitive: 1,
-  numActiveParams: 1,
+  activeParams: Object.freeze([]) as readonly ParamName[],
   showDictionary: true,
   enableJudge: false,
   budget: 6,
   numTest: 8,
   numCompositional: 4,
+  solverParams: Object.freeze([
+    "objectMarking",
+    "plural",
+    "past",
+    "subjectAgreement",
+    "vowelHarmony",
+  ]) as readonly ParamName[],
 });
 
 /** The Python name of each EnvConfig field, in Python's field order. */
@@ -285,13 +352,35 @@ export const PY_CONFIG_NAMES: Readonly<Record<keyof EnvConfig, string>> = {
   numNouns: "num_nouns",
   numTransitive: "num_transitive",
   numIntransitive: "num_intransitive",
-  numActiveParams: "num_active_params",
+  activeParams: "active_params",
   showDictionary: "show_dictionary",
   enableJudge: "enable_judge",
   budget: "budget",
   numTest: "num_test",
   numCompositional: "num_compositional",
+  solverParams: "solver_params",
 };
+
+const PARAM_LIST_FIELDS = ["activeParams", "solverParams"] as const;
+const PARAM_NAME_OF_PY: Readonly<Record<string, ParamName>> = Object.fromEntries(
+  PARAM_NAMES.map((name) => [PY_PARAM_NAMES[name], name]),
+);
+
+/** Return the Python name of a parameter; a name that is no parameter is returned unchanged. */
+function pyParamName(name: string): string {
+  return PY_PARAM_NAMES[name as ParamName] ?? name;
+}
+
+/** Python's repr of a list of strings. */
+function pyListRepr(items: readonly string[]): string {
+  return `[${items.map((item) => `'${item}'`).join(", ")}]`;
+}
+
+/** Python's repr of a tuple of strings. */
+function pyTupleRepr(items: readonly string[]): string {
+  const inner = items.map((item) => `'${item}'`).join(", ");
+  return items.length === 1 ? `(${inner},)` : `(${inner})`;
+}
 
 /** Check that the settings can generate an episode; throw like EnvConfig.__post_init__. */
 export function validateEnvConfig(config: EnvConfig): void {
@@ -309,15 +398,59 @@ export function validateEnvConfig(config: EnvConfig): void {
   require("numNouns", 2, NOUN_POOL.length);
   require("numTransitive", 1, TRANSITIVE_POOL.length);
   require("numIntransitive", 1, INTRANSITIVE_POOL.length);
-  require("numActiveParams", 0, OPTIONAL_PARAMS.length);
   require("budget", 1, null);
   require("numTest", 1, null);
   require("numCompositional", 0, config.numTest);
+  for (const field of PARAM_LIST_FIELDS) {
+    const params = config[field].map(pyParamName);
+    const unknown = [...new Set(config[field].filter((name) => !OPTIONAL_PARAMS.includes(name)))]
+      .map(pyParamName)
+      .sort();
+    if (unknown.length > 0) {
+      throw new RangeError(
+        `EnvConfig.${PY_CONFIG_NAMES[field]}: unknown ${pyListRepr(unknown)}; ` +
+          `choose from ${pyListRepr(OPTIONAL_PARAMS.map(pyParamName))}`,
+      );
+    }
+    if (new Set(params).size !== params.length) {
+      throw new RangeError(`EnvConfig.${PY_CONFIG_NAMES[field]}=${pyTupleRepr(params)}: has duplicates`);
+    }
+  }
+  const active = new Set(config.activeParams);
+  const activeRepr = pyTupleRepr(config.activeParams.map(pyParamName));
+  if (active.has("vowelHarmony") && !AFFIX_PARAMS.some((name) => active.has(name))) {
+    throw new RangeError(
+      `EnvConfig.active_params=${activeRepr}: vowel harmony only changes affix vowels, so it ` +
+        `needs one of ${pyListRepr(AFFIX_PARAMS.map(pyParamName))} as well`,
+    );
+  }
+  if (active.has("objectPlural") && !active.has("plural")) {
+    throw new RangeError(
+      `EnvConfig.active_params=${activeRepr}: object_plural changes the plural affix of ` +
+        "objects, so it needs plural as well",
+    );
+  }
+  const missing = [...active]
+    .filter((name) => !config.solverParams.includes(name))
+    .map(pyParamName)
+    .sort();
+  if (missing.length > 0) {
+    throw new RangeError(
+      `EnvConfig.solver_params=${pyTupleRepr(config.solverParams.map(pyParamName))}: misses ` +
+        `active parameters ${pyListRepr(missing)}, so the solver could never confirm the true ` +
+        "grammar",
+    );
+  }
 }
 
 /** Return the default config with overrides applied, validated and frozen. */
 export function makeEnvConfig(overrides: Partial<EnvConfig> = {}): EnvConfig {
-  const config: EnvConfig = Object.freeze({ ...DEFAULT_ENV_CONFIG, ...overrides });
+  const merged = { ...DEFAULT_ENV_CONFIG, ...overrides };
+  const config: EnvConfig = Object.freeze({
+    ...merged,
+    activeParams: Object.freeze([...merged.activeParams]),
+    solverParams: Object.freeze([...merged.solverParams]),
+  });
   validateEnvConfig(config);
   return config;
 }
@@ -326,18 +459,26 @@ export function makeEnvConfig(overrides: Partial<EnvConfig> = {}): EnvConfig {
 export function envConfigFromPython(fields: Readonly<Record<string, unknown>>): EnvConfig {
   const overrides: Record<string, unknown> = {};
   for (const [name, pyName] of Object.entries(PY_CONFIG_NAMES)) {
-    if (fields[pyName] !== undefined) overrides[name] = fields[pyName];
+    const value = fields[pyName];
+    if (value === undefined) continue;
+    // A name that is no parameter is kept, so that validation reports it like Python.
+    overrides[name] = (PARAM_LIST_FIELDS as readonly string[]).includes(name)
+      ? (value as string[]).map((item) => PARAM_NAME_OF_PY[item] ?? item)
+      : value;
   }
   return makeEnvConfig(overrides as Partial<EnvConfig>);
 }
 
 /** Return the config with Python's field names, as dataclasses.asdict would give it. */
-export function envConfigToPython(config: EnvConfig): Record<string, number | boolean> {
+export function envConfigToPython(config: EnvConfig): Record<string, number | boolean | string[]> {
   return Object.fromEntries(
-    (Object.keys(PY_CONFIG_NAMES) as (keyof EnvConfig)[]).map((name) => [
-      PY_CONFIG_NAMES[name],
-      config[name],
-    ]),
+    (Object.keys(PY_CONFIG_NAMES) as (keyof EnvConfig)[]).map((name) => {
+      const value = config[name];
+      return [
+        PY_CONFIG_NAMES[name],
+        typeof value === "object" ? value.map(pyParamName) : value,
+      ];
+    }),
   );
 }
 
@@ -416,7 +557,7 @@ export function meaningsEqual(a: Meaning, b: Meaning): boolean {
   );
 }
 
-/** A slot of a word: a root (name is a concept) or an affix (name is one of AFFIX_NAMES). */
+/** A slot of a word: a root (name is a key of Language.roots) or an affix (name is an affix). */
 export interface Morpheme {
   readonly isRoot: boolean;
   readonly name: string;
@@ -424,7 +565,12 @@ export interface Morpheme {
 export type Word = readonly Morpheme[];
 export type Template = readonly Word[];
 
-/** A generated language: its grammar, the vocabulary of its survey sheet and its morphemes. */
+/**
+ * A generated language: its grammar, the vocabulary of its survey sheet and its morphemes.
+ *
+ * roots maps each concept to its root and, under verbNumberStem, each verb's pluralStemKey to its
+ * second stem.
+ */
 export class Language {
   constructor(
     readonly grammar: Grammar,
@@ -499,15 +645,19 @@ export function morpheme(isRoot: boolean, name: string): Morpheme {
  * forms it has inferred from observations.
  */
 export function buildSentenceTemplate(grammar: Grammar, meaning: Meaning): Template {
-  const buildNoun = (concept: string, number: string | null, isObject: boolean): Word => {
+  const buildNoun = (concept: string, number: string | null, role: "S" | "A" | "O"): Word => {
     const plural = number === "plural";
-    const prefixes = plural && grammar.plural === "prefix" ? ["plural"] : [];
-    const suffixes = plural && grammar.plural === "suffix" ? ["plural"] : [];
-    if (isObject && grammar.objectMarking === "suffix") {
+    const pluralAffix = role === "O" && grammar.objectPlural === "distinct" ? "object_plural" : "plural";
+    const prefixes = plural && grammar.plural === "prefix" ? [pluralAffix] : [];
+    const suffixes = plural && grammar.plural === "suffix" ? [pluralAffix] : [];
+    let caseAffix: string | null = null;
+    if (role === "O" && grammar.objectMarking === "suffix") caseAffix = "object";
+    if (role === "A" && grammar.ergativeMarking === "suffix") caseAffix = "ergative";
+    if (caseAffix !== null) {
       if (grammar.pluralCaseOrder === "case_first") {
-        suffixes.unshift("object");
+        suffixes.unshift(caseAffix);
       } else {
-        suffixes.push("object");
+        suffixes.push(caseAffix);
       }
     }
     return [
@@ -524,16 +674,22 @@ export function buildSentenceTemplate(grammar: Grammar, meaning: Meaning): Templ
   if (meaning.subjectNumber === "plural" && grammar.subjectAgreement === "suffix") {
     verbSuffixes.push("agreement");
   }
+  const transitive = isTransitive(meaning);
+  const absolutiveNumber = transitive ? meaning.objectNumber : meaning.subjectNumber;
+  const pluralStem =
+    (grammar.verbNumberStem === "subject" && meaning.subjectNumber === "plural") ||
+    (grammar.verbNumberStem === "absolutive" && absolutiveNumber === "plural");
+  const stem = pluralStem ? pluralStemKey(meaning.verb) : meaning.verb;
   const words: Record<string, Word> = {
-    S: buildNoun(meaning.subject, meaning.subjectNumber, false),
+    S: buildNoun(meaning.subject, meaning.subjectNumber, transitive ? "A" : "S"),
     V: [
       ...verbPrefixes.map((name) => morpheme(false, name)),
-      morpheme(true, meaning.verb),
+      morpheme(true, stem),
       ...verbSuffixes.map((name) => morpheme(false, name)),
     ],
   };
-  if (isTransitive(meaning)) {
-    words["O"] = buildNoun(meaning.object!, meaning.objectNumber, true);
+  if (transitive) {
+    words["O"] = buildNoun(meaning.object!, meaning.objectNumber, "O");
     return [...grammar.wordOrder].map((role) => words[role]!);
   }
   const subjectFirst = grammar.wordOrder.indexOf("S") < grammar.wordOrder.indexOf("V");
@@ -550,14 +706,11 @@ export function generate(
 
   const sampleGrammar = (): Grammar => {
     const wordOrder = rng.choice(PARAM_CHOICES.wordOrder);
-    let active: ParamName[];
-    for (;;) {
-      active = rng.sample(OPTIONAL_PARAMS, config.numActiveParams);
-      // Vowel harmony is invisible unless some affix exists, so it never comes alone.
-      if (!active.includes("vowelHarmony") || active.some((p) => p !== "vowelHarmony")) break;
-    }
+    // Values are drawn in OPTIONAL_PARAMS order, so the order of activeParams does not change
+    // the languages.
     const values: Partial<Record<ParamName, string>> = {};
-    for (const p of active) {
+    for (const p of OPTIONAL_PARAMS) {
+      if (!config.activeParams.includes(p)) continue;
       const choices: readonly string[] = PARAM_CHOICES[p];
       values[p] = rng.choice(choices.filter((v) => v !== "none"));
     }
@@ -572,25 +725,38 @@ export function generate(
 
   // Affixes and roots draw from disjoint consonant sets: every morpheme differs, and an affix
   // syllable never occurs inside a root, so morpheme boundaries are unique (roots have two CV
-  // syllables, affixes one).
+  // syllables, affixes one). Extra affixes take the last consonants and draw after the others,
+  // so grammars without them get the same forms as before the extra affixes existed.
+  const extraAffixes = EXTRA_AFFIX_PARAMS.filter(([, param]) => grammar[param] !== "none").map(
+    ([name]) => name,
+  );
   const consonants = rng.sample([...CONSONANTS], CONSONANTS.length);
-  const affixConsonants = consonants.slice(0, AFFIX_NAMES.length);
-  const rootConsonants = consonants.slice(AFFIX_NAMES.length);
+  const numRootConsonants = CONSONANTS.length - AFFIX_NAMES.length - extraAffixes.length;
+  const rootConsonants = consonants.slice(AFFIX_NAMES.length, AFFIX_NAMES.length + numRootConsonants);
+  const affixNames = [...AFFIX_NAMES, ...extraAffixes];
+  const affixConsonants = [
+    ...consonants.slice(0, AFFIX_NAMES.length),
+    ...consonants.slice(consonants.length - extraAffixes.length),
+  ];
   const affixes: Record<string, string> = {};
-  AFFIX_NAMES.forEach((name, i) => {
+  affixNames.forEach((name, i) => {
     affixes[name] = affixConsonants[i]! + rng.choice(VOWELS);
   });
   const roots: Record<string, string> = {};
   const used = new Set<string>();
-  for (const concept of [...nouns, ...transitive, ...intransitive]) {
+  const addRoot = (key: string): void => {
     let form: string;
     for (;;) {
       form = "";
       for (let i = 0; i < 2; i++) form += rng.choice(rootConsonants) + rng.choice(VOWELS);
       if (!used.has(form)) break;
     }
-    roots[concept] = form;
+    roots[key] = form;
     used.add(form);
+  };
+  for (const concept of [...nouns, ...transitive, ...intransitive]) addRoot(concept);
+  if (grammar.verbNumberStem !== "none") {
+    for (const verb of [...transitive, ...intransitive]) addRoot(pluralStemKey(verb));
   }
   const language = new Language(
     grammar,
@@ -694,8 +860,23 @@ export function parseAction(text: string, language: Language, enableJudge: boole
 }
 
 /** Reward of an episode (spec 7) and the counts that verl logs with it. */
+/**
+ * Conditions an investigation can cover; EpisodeScore.coverage is the fraction of them that occur
+ * in at least one asked meaning. Each pairs a marked feature with a verb type, since a language may
+ * mark a feature differently on transitive and intransitive sentences.
+ */
+export const COVERAGE_CONDITIONS: readonly (readonly [string, (meaning: Meaning) => boolean])[] = [
+  ["transitive_plural_subject", (m) => isTransitive(m) && m.subjectNumber === "plural"],
+  ["transitive_plural_object", (m) => isTransitive(m) && m.objectNumber === "plural"],
+  ["transitive_past", (m) => isTransitive(m) && m.tense === "past"],
+  ["intransitive_plural_subject", (m) => !isTransitive(m) && m.subjectNumber === "plural"],
+  ["intransitive_past", (m) => !isTransitive(m) && m.tense === "past"],
+];
+
 export interface EpisodeScore {
   readonly reward: number;
+  /** The fraction of COVERAGE_CONDITIONS covered by the asked meanings. */
+  readonly coverage: number;
   readonly numAsks: number;
   readonly numJudges: number;
   readonly numInvalid: number;
@@ -897,8 +1078,11 @@ export class Episode {
     });
     const numScorable = items.filter((item) => item.scorable).length;
     const numCorrect = items.filter((item) => item.correct).length;
+    const asked = [...this.asked.values()];
+    const numCovered = COVERAGE_CONDITIONS.filter(([, condition]) => asked.some(condition)).length;
     const score: EpisodeScore = {
       reward: numScorable ? numCorrect / numScorable : 0.0,
+      coverage: numCovered / COVERAGE_CONDITIONS.length,
       numAsks: this.numAsks,
       numJudges: this.numJudges,
       numInvalid: this.numInvalid,

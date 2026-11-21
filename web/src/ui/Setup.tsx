@@ -1,6 +1,6 @@
 import { useMemo, useState } from "preact/hooks";
 
-import { type EnvConfig, makeEnvConfig } from "../env";
+import { DEFAULT_ENV_CONFIG, type EnvConfig, makeEnvConfig, OPTIONAL_PARAMS, type ParamName } from "../env";
 import type { Game } from "./App";
 import { describeSeed, type Mode, pickSeed, sameConfig, TRAINING_CONFIG } from "./seeds";
 
@@ -9,8 +9,20 @@ interface Props {
   onStart: (mode: Mode, seed: number, config: EnvConfig) => void;
 }
 
+const PARAM_LABELS: Record<ParamName, string> = {
+  wordOrder: "Word order",
+  objectMarking: "Object case suffix",
+  plural: "Plural affix",
+  pluralCaseOrder: "Order of plural and case suffixes",
+  past: "Past tense affix",
+  subjectAgreement: "Verb agrees with a plural subject",
+  vowelHarmony: "Vowel harmony",
+  ergativeMarking: "Ergative case suffix",
+  objectPlural: "Separate plural affix for objects",
+  verbNumberStem: "Verb stem changes with number",
+};
+
 const CUSTOM_FIELDS: { key: keyof EnvConfig; label: string; min: number; max: number }[] = [
-  { key: "numActiveParams", label: "Grammar features besides word order", min: 0, max: 5 },
   { key: "budget", label: "Questions", min: 1, max: 30 },
   { key: "numTest", label: "Test sentences", min: 1, max: 20 },
   { key: "numCompositional", label: "Test sentences combining plural and past", min: 0, max: 20 },
@@ -34,7 +46,9 @@ export function Setup({ game, onStart }: Props) {
   let configError: string | null = null;
   if (custom) {
     try {
-      config = makeEnvConfig(fields);
+      // The solver must consider every switched-on parameter besides the default ones.
+      const extra = fields.activeParams.filter((name) => !DEFAULT_ENV_CONFIG.solverParams.includes(name));
+      config = makeEnvConfig({ ...fields, solverParams: [...DEFAULT_ENV_CONFIG.solverParams, ...extra] });
     } catch (error) {
       config = null;
       configError = error instanceof Error ? error.message.replace(/^EnvConfig\./, "") : String(error);
@@ -50,6 +64,13 @@ export function Setup({ game, onStart }: Props) {
 
   const setField = (key: keyof EnvConfig, value: number | boolean) =>
     setFields((current) => ({ ...current, [key]: value }));
+  const toggleParam = (name: ParamName, on: boolean) =>
+    setFields((current) => ({
+      ...current,
+      activeParams: on
+        ? [...current.activeParams, name]
+        : current.activeParams.filter((other) => other !== name),
+    }));
 
   return (
     <section class="card setup" aria-labelledby="setup-title">
@@ -137,6 +158,17 @@ export function Setup({ game, onStart }: Props) {
           </p>
         ) : (
           <div class="custom-grid">
+            <span class="label">Grammar features besides word order</span>
+            {OPTIONAL_PARAMS.map((name) => (
+              <label class="check-field" key={name}>
+                <input
+                  type="checkbox"
+                  checked={fields.activeParams.includes(name)}
+                  onChange={(event) => toggleParam(name, event.currentTarget.checked)}
+                />
+                <span>{PARAM_LABELS[name]}</span>
+              </label>
+            ))}
             {CUSTOM_FIELDS.map(({ key, label, min, max }) => (
               <label class="number-field" key={key}>
                 <span>{label}</span>

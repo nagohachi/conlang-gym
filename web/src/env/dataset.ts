@@ -1,5 +1,5 @@
 /**
- * The seeds of the published model's dataset (README: make_dataset --num_active_params 0), as
+ * The seeds of the published model's dataset (README: make_dataset with default flags), as
  * web/scripts/dataset_seeds.py replays make_dataset.py's selection.
  */
 
@@ -31,7 +31,8 @@ export interface DatasetSeeds {
 
 export const DATASET_SEEDS: DatasetSeeds = Object.freeze({
   ...data,
-  envConfig: makeEnvConfig(data.envConfig),
+  // JSON gives the parameter lists as string[]; makeEnvConfig rejects any name that is no parameter.
+  envConfig: makeEnvConfig(data.envConfig as Partial<EnvConfig>),
 });
 
 /**

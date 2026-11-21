@@ -31,7 +31,7 @@ from conlang_gym.language import (
     Meaning,
     generate,
 )
-from conlang_gym.solver import ALL_GRAMMARS, HypothesisSolver, solve
+from conlang_gym.solver import ALL_GRAMMARS, HypothesisSolver, list_grammars, solve
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,6 @@ type Json = dict[str, Json] | list[Json] | str | int | float | bool | None
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
 MAX_SAFE_INTEGER = 2**53 - 1
-# The largest number of hypotheses the solver can have: len(ALL_GRAMMARS).
-MAX_HYPOTHESES = len(ALL_GRAMMARS)
 
 
 def seed_to_json(seed: int) -> int | str:
@@ -53,9 +51,12 @@ def meaning_to_json(meaning: Meaning) -> list[str | None]:
     return list(meaning)
 
 
-def config_to_json(config: EnvConfig) -> dict[str, int | bool]:
-    """Return the config with Python's field names."""
-    return dataclasses.asdict(config)
+def config_to_json(config: EnvConfig) -> dict[str, int | bool | list[str]]:
+    """Return the config with Python's field names (parameter tuples as lists)."""
+    return {
+        name: list(value) if isinstance(value, tuple) else value
+        for name, value in dataclasses.asdict(config).items()
+    }
 
 
 def grammar_label(grammar: Grammar) -> str:
@@ -64,7 +65,8 @@ def grammar_label(grammar: Grammar) -> str:
         f"{p}-{getattr(grammar, p)}" for p in OPTIONAL_PARAMS if getattr(grammar, p) != "none"
     ]
     parts = [grammar.word_order, *active]
-    if grammar.object_marking == "suffix" and grammar.plural == "suffix":
+    has_case_suffix = "suffix" in (grammar.object_marking, grammar.ergative_marking)
+    if has_case_suffix and grammar.plural == "suffix":
         parts.append(grammar.plural_case_order)
     return "_".join(parts)
 
@@ -190,13 +192,45 @@ def describe_language(seed: int, config: EnvConfig) -> Json:
     }
 
 
-GENERATE_CONFIGS: list[tuple[str, dict[str, int | bool], list[int]]] = [
+# Every parameter, so that a config can switch any of them on.
+ALL_PARAMS = list(OPTIONAL_PARAMS)
+# The five parameters of spec v0.1, EnvConfig.solver_params' default.
+SPEC_PARAMS = list(EnvConfig().solver_params)
+
+GENERATE_CONFIGS: list[tuple[str, dict[str, int | bool | list[str]], list[int]]] = [
     ("default", {}, [*range(60), 2**32 + 5, 10**12 + 7, 2**64 + 1, 123456789]),
-    ("nap0", {"num_active_params": 0}, list(range(25))),
-    ("nap2", {"num_active_params": 2}, list(range(25))),
-    ("nap3", {"num_active_params": 3}, list(range(25))),
-    ("nap4", {"num_active_params": 4}, list(range(25))),
-    ("nap5", {"num_active_params": 5}, list(range(25))),
+    ("object_marking", {"active_params": ["object_marking"]}, list(range(15))),
+    ("plural", {"active_params": ["plural"]}, list(range(15))),
+    ("past", {"active_params": ["past"]}, list(range(15))),
+    ("subject_agreement", {"active_params": ["subject_agreement"]}, list(range(15))),
+    ("plural_past", {"active_params": ["past", "plural"]}, list(range(25))),
+    ("case_order", {"active_params": ["object_marking", "plural"]}, list(range(25))),
+    ("harmony", {"active_params": ["vowel_harmony", "past"]}, list(range(25))),
+    ("spec_params", {"active_params": SPEC_PARAMS}, list(range(25))),
+    (
+        "ergative",
+        {"active_params": ["ergative_marking"], "solver_params": ALL_PARAMS},
+        list(range(15)),
+    ),
+    (
+        "tripartite",
+        {
+            "active_params": ["object_marking", "ergative_marking", "plural"],
+            "solver_params": ALL_PARAMS,
+        },
+        list(range(25)),
+    ),
+    (
+        "object_plural",
+        {"active_params": ["plural", "object_plural"], "solver_params": ALL_PARAMS},
+        list(range(25)),
+    ),
+    (
+        "verb_number_stem",
+        {"active_params": ["verb_number_stem"], "solver_params": ALL_PARAMS},
+        list(range(25)),
+    ),
+    ("all_params", {"active_params": ALL_PARAMS, "solver_params": ALL_PARAMS}, list(range(25))),
     ("no_dictionary", {"show_dictionary": False}, list(range(15))),
     ("judge", {"enable_judge": True}, list(range(15))),
     ("judge_no_dictionary", {"enable_judge": True, "show_dictionary": False}, list(range(5))),
@@ -204,7 +238,12 @@ GENERATE_CONFIGS: list[tuple[str, dict[str, int | bool], list[int]]] = [
     ("min_vocab", {"num_nouns": 2, "num_transitive": 1, "num_intransitive": 1}, list(range(15))),
     (
         "mid_vocab",
-        {"num_nouns": 7, "num_transitive": 3, "num_intransitive": 2, "num_active_params": 3},
+        {
+            "num_nouns": 7,
+            "num_transitive": 3,
+            "num_intransitive": 2,
+            "active_params": ["object_marking", "plural", "past"],
+        },
         list(range(10)),
     ),
     ("budget1", {"budget": 1}, list(range(5))),
@@ -244,8 +283,15 @@ def dump_generate() -> Json:
         {"num_transitive": 7},
         {"num_intransitive": 0},
         {"num_intransitive": 5},
-        {"num_active_params": -1},
-        {"num_active_params": 6},
+        {"active_params": ["tense"]},
+        {"active_params": ["past", "past"]},
+        {"active_params": ["vowel_harmony"]},
+        {"active_params": ["vowel_harmony", "verb_number_stem"], "solver_params": ALL_PARAMS},
+        {"active_params": ["object_plural"], "solver_params": ALL_PARAMS},
+        {"active_params": ["ergative_marking"]},
+        {"active_params": ["plural", "verb_number_stem"]},
+        {"solver_params": ["plural", "number"]},
+        {"solver_params": ["past", "plural", "past"]},
         {"budget": 0},
         {"num_test": 0},
         {"num_compositional": -1},
@@ -283,7 +329,8 @@ def dump_generate() -> Json:
 
 def dump_grammars() -> Json:
     """Record ALL_GRAMMARS, their labels and the realizations of a few meanings under each."""
-    lang, _ = generate(0, EnvConfig(num_active_params=0))
+    # A language with every extra affix and the verbs' second stems, so every grammar can realize.
+    lang, _ = generate(0, EnvConfig(active_params=ALL_PARAMS, solver_params=ALL_PARAMS))
     n1, n2 = lang.nouns[0], lang.nouns[1]
     t, i = lang.transitive[0], lang.intransitive[0]
     meanings = [
@@ -681,12 +728,19 @@ def dump_episodes() -> Json:
         # Other configs.
         (
             [25, 26],
-            EnvConfig(num_active_params=3, show_dictionary=False),
+            EnvConfig(active_params=("object_marking", "plural", "past"), show_dictionary=False),
             [("ask_random", False), ("ask_shuffled", False), ("done", False)],
         ),
         (
             [27],
-            EnvConfig(num_nouns=10, num_transitive=6, num_intransitive=4, num_active_params=5),
+            EnvConfig(
+                num_nouns=10, num_transitive=6, num_intransitive=4, active_params=SPEC_PARAMS
+            ),
+            [("ask_random", False), ("ask_transitive", False), ("ask_random", False)],
+        ),
+        (
+            [32, 33],
+            EnvConfig(active_params=ALL_PARAMS, solver_params=ALL_PARAMS),
             [("ask_random", False), ("ask_transitive", False), ("ask_random", False)],
         ),
         (
@@ -799,16 +853,51 @@ def dump_pymath() -> Json:
     }
 
 
-SOLVER_CONFIGS: list[tuple[str, dict[str, int | bool], int, int]] = [
+SOLVER_CONFIGS: list[tuple[str, dict[str, int | bool | list[str]], int, int]] = [
     # name, EnvConfig overrides, number of seeds, num_candidates
-    ("nap0", {"num_active_params": 0}, 300, 48),
-    ("nap1", {"num_active_params": 1}, 300, 48),
-    ("nap2", {"num_active_params": 2}, 300, 48),
+    ("word_order", {}, 300, 48),
+    ("past", {"active_params": ["past"]}, 300, 48),
+    ("plural_past", {"active_params": ["plural", "past"]}, 300, 48),
+    ("case_order", {"active_params": ["object_marking", "plural"]}, 100, 48),
     ("no_dictionary", {"show_dictionary": False}, 60, 48),
-    ("nap2_budget2", {"num_active_params": 2, "budget": 2}, 60, 48),
-    ("nap2_candidates8", {"num_active_params": 2}, 40, 8),
-    ("nap1_candidates_all", {}, 20, 1000),
+    ("plural_past_budget2", {"active_params": ["plural", "past"], "budget": 2}, 60, 48),
+    ("plural_past_candidates8", {"active_params": ["plural", "past"]}, 40, 8),
+    ("past_candidates_all", {"active_params": ["past"]}, 20, 1000),
+    (
+        "ergative",
+        {
+            "active_params": ["ergative_marking"],
+            "solver_params": [*SPEC_PARAMS, "ergative_marking"],
+        },
+        20,
+        48,
+    ),
+    (
+        "verb_number_stem",
+        {
+            "active_params": ["verb_number_stem"],
+            "solver_params": [*SPEC_PARAMS, "verb_number_stem"],
+        },
+        20,
+        48,
+    ),
+    (
+        "object_plural",
+        {
+            "active_params": ["plural", "object_plural"],
+            "solver_params": [*SPEC_PARAMS, "object_plural"],
+        },
+        20,
+        48,
+    ),
 ]
+# The largest number of hypotheses the solver starts from in SOLVER_CONFIGS, which bounds the
+# count / num_hypotheses inputs of math.log that dump_pymath checks. The space of every parameter
+# (len(ALL_GRAMMARS)) would need about 16 million inputs, so the solver fixtures stay below it.
+MAX_HYPOTHESES = max(
+    len(list_grammars(frozenset(EnvConfig(**overrides).solver_params)))
+    for _, overrides, _, _ in SOLVER_CONFIGS
+)
 NUM_TRACED_SEEDS = 12
 
 

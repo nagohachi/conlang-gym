@@ -85,12 +85,17 @@ class Grammar:
 
 @dataclass(frozen=True)
 class EnvConfig:
-    """Difficulty settings (spec 10); the defaults are the Qwen3.5-2B initial settings (spec 11)."""
+    """Difficulty settings (spec 10); the defaults are those of the published word-order model.
+
+    active_params names the parameters switched on in every language, besides word order; each one
+    takes a random non-"none" value per seed (e.g. past is a suffix in some languages and a prefix
+    in others).
+    """
 
     num_nouns: int = 4
     num_transitive: int = 2
     num_intransitive: int = 1
-    num_active_params: int = 1
+    active_params: tuple[str, ...] = ()
     show_dictionary: bool = True
     enable_judge: bool = False
     budget: int = 6
@@ -110,10 +115,23 @@ class EnvConfig:
         require("num_nouns", 2, len(NOUN_POOL))
         require("num_transitive", 1, len(TRANSITIVE_POOL))
         require("num_intransitive", 1, len(INTRANSITIVE_POOL))
-        require("num_active_params", 0, len(OPTIONAL_PARAMS))
         require("budget", 1, None)
         require("num_test", 1, None)
         require("num_compositional", 0, self.num_test)
+        # JSON round trips (extra_info) turn the tuple into a list.
+        object.__setattr__(self, "active_params", tuple(self.active_params))
+        unknown = sorted(set(self.active_params) - set(OPTIONAL_PARAMS))
+        if unknown:
+            raise ValueError(
+                f"EnvConfig.active_params: unknown {unknown}; choose from {list(OPTIONAL_PARAMS)}"
+            )
+        if len(set(self.active_params)) != len(self.active_params):
+            raise ValueError(f"EnvConfig.active_params={self.active_params}: has duplicates")
+        if set(self.active_params) == {"vowel_harmony"}:
+            raise ValueError(
+                "EnvConfig.active_params=('vowel_harmony',): vowel harmony only changes affix "
+                "vowels, so it needs an affix parameter as well"
+            )
 
 
 class Meaning(NamedTuple):
@@ -254,12 +272,13 @@ def generate(seed: int, config: EnvConfig) -> tuple[Language, list[Meaning]]:
 
     def sample_grammar() -> Grammar:
         word_order = rng.choice(PARAM_CHOICES["word_order"])
-        while True:
-            active = rng.sample(OPTIONAL_PARAMS, config.num_active_params)
-            # Vowel harmony is invisible unless some affix exists, so it never comes alone.
-            if "vowel_harmony" not in active or any(p != "vowel_harmony" for p in active):
-                break
-        values = {p: rng.choice([v for v in PARAM_CHOICES[p] if v != "none"]) for p in active}
+        # Values are drawn in OPTIONAL_PARAMS order, so the order of active_params does not change
+        # the languages.
+        values = {
+            p: rng.choice([v for v in PARAM_CHOICES[p] if v != "none"])
+            for p in OPTIONAL_PARAMS
+            if p in config.active_params
+        }
         values["plural_case_order"] = rng.choice(PARAM_CHOICES["plural_case_order"])
         return Grammar(word_order=word_order, **values).to_canonical()
 

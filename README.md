@@ -31,12 +31,12 @@ source libs/verl/.venv/bin/activate
 ## Data
 
 ```bash
-python -m conlang_gym.make_dataset --out_dir outputs/data --num_active_params 0
+python -m conlang_gym.make_dataset --out_dir outputs/data
 ```
 
 This writes `train.parquet` (8,000 languages), `val_seen.parquet` (64 languages per training word order, with seeds not used in training) and `val_unseen.parquet` (64 languages per held-out word order). 
 Each row stores only the seed and the environment settings, and the agent loop regenerates the language from them. 
-Every field of `EnvConfig` in `conlang_gym/language.py` is also a flag, e.g. `--num_active_params`, `--budget` or `--show_dictionary`.
+Every field of `EnvConfig` in `conlang_gym/language.py` is also a flag, e.g. `--active_params past object_marking`, `--budget` or `--show_dictionary`.
 
 ## Training
 

@@ -2,7 +2,7 @@
 # Agentic GRPO | Qwen3.5-2B | conlang-gym | FSDP2 training on 2 GPUs + vLLM rollout on 1 separate GPU (verl V1 separate_async)
 #
 # Usage, from the conlang-gym root with libs/verl/.venv activated. Build the data first:
-#   python -m conlang_gym.make_dataset --out_dir outputs/data --num_active_params 0
+#   python -m conlang_gym.make_dataset --out_dir outputs/data
 # (word order only: with word order + 1 parameter, the spec's initial setting, Qwen3.5-2B scored 4.5% before training, below the spec's 20-60% calibration window.)
 # Validation has two files: val_seen (training word orders, held-out seeds) and val_unseen (a word order never seen in training). Metrics are per data_source, i.e. per split and word order:
 #   val-core/conlang_gym_val_seen_<order>/reward/mean@1, val-core/conlang_gym_val_unseen_<order>/reward/mean@1

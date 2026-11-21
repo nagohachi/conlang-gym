@@ -103,9 +103,12 @@ def main() -> None:
     parser.add_argument("--unseen_grammar_fraction", type=float, default=0.2)
     parser.add_argument("--num_workers", type=int, default=8)
     for name, config_field in EnvConfig.__dataclass_fields__.items():
-        is_bool = isinstance(config_field.default, bool)
-        arg_type = parse_bool if is_bool else type(config_field.default)
-        parser.add_argument(f"--{name}", type=arg_type, default=config_field.default)
+        default = config_field.default
+        if isinstance(default, tuple):
+            parser.add_argument(f"--{name}", nargs="*", default=list(default))
+            continue
+        arg_type = parse_bool if isinstance(default, bool) else type(default)
+        parser.add_argument(f"--{name}", type=arg_type, default=default)
     args = parser.parse_args()
     config = EnvConfig(**{name: getattr(args, name) for name in EnvConfig.__dataclass_fields__})
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -114,8 +117,8 @@ def main() -> None:
         (
             grammar
             for grammar in ALL_GRAMMARS
-            if sum(getattr(grammar, p) != "none" for p in OPTIONAL_PARAMS)
-            == config.num_active_params
+            if {p for p in OPTIONAL_PARAMS if getattr(grammar, p) != "none"}
+            == set(config.active_params)
         ),
         key=build_grammar_key,
     )
@@ -123,9 +126,9 @@ def main() -> None:
     num_unseen = max(1, round(len(grammars) * args.unseen_grammar_fraction))
     unseen, seen = set(grammars[:num_unseen]), set(grammars[num_unseen:])
     logger.info(
-        "%d grammars with %d active parameter(s): seen %s, unseen %s",
+        "%d grammars with active parameters %s: seen %s, unseen %s",
         len(grammars),
-        config.num_active_params,
+        list(config.active_params),
         sorted(map(build_grammar_label, seen)),
         sorted(map(build_grammar_label, unseen)),
     )

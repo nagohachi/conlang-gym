@@ -37,7 +37,7 @@ _build_template_cached = lru_cache(maxsize=500_000)(build_sentence_template)
 
 
 @lru_cache(maxsize=16)
-def _list_grammars(params: frozenset[str]) -> tuple[Grammar, ...]:
+def list_grammars(params: frozenset[str]) -> tuple[Grammar, ...]:
     """Return the grammars of ALL_GRAMMARS whose switched-on parameters are all in params.
 
     It is module-level so that the result is cached across seeds.
@@ -191,7 +191,7 @@ def solve(seed: int, config: EnvConfig, num_candidates: int = 48) -> int | None:
     dictionary = {concept: language.roots[concept] for concept in concepts}
     solver = HypothesisSolver(
         dictionary if config.show_dictionary else None,
-        _list_grammars(frozenset(config.solver_params)),
+        list_grammars(frozenset(config.solver_params)),
     )
     rng = random.Random(seed * 7919 + 1)
     test_set = set(tests)

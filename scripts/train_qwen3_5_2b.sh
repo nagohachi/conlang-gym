@@ -6,7 +6,7 @@
 # (word order only: with word order + 1 parameter, the spec's initial setting, Qwen3.5-2B scored 4.5% before training, below the spec's 20-60% calibration window.)
 # Validation has two files: val_seen (training word orders, held-out seeds) and val_unseen (a word order never seen in training). Metrics are per data_source, i.e. per split and word order:
 #   val-core/conlang_gym_val_seen_<order>/reward/mean@1, val-core/conlang_gym_val_unseen_<order>/reward/mean@1
-# A checkpoint every 5 steps (2 kept) lets an interrupted run resume (trainer.resume_mode=auto).
+# A checkpoint every 10 steps (2 kept) lets an interrupted run resume (trainer.resume_mode=auto).
 # The argument picks Qwen3.5's thinking mode (think) or not (nothink); coverage is nothink with a reward for asking about every condition (conlang_gym_agent_coverage in conlang_gym/agent_loop.yaml). Ray hands out the visible GPUs in order and creates the trainer pool first, so the first two visible GPUs train and the third rolls out:
 #   bash scripts/train_qwen3_5_2b.sh nothink
 set -xeuo pipefail
@@ -27,6 +27,7 @@ export PYTHONPATH="${PWD}${PYTHONPATH:+:${PYTHONPATH}}"
 mkdir -p outputs/logs
 
 # separate_async requires data.train_batch_size = parameter_sync_step x ppo_mini_batch_size (128 = 4 x 32).
+# The actor and the log-prob passes pack at most 16,384 tokens per micro-batch: its logits are tokens x 248,320 vocab x 2 bytes (8 GB here), and 24,576 tokens (12 GB) ran a full-parameter update out of memory on a 48 GB GPU. The cap only changes how a mini-batch is split, not the update.
 # TransferQueue storage units (1 Ray CPU each), reward workers (~1 GB RAM each) and agent-loop workers (~1.5 GB RAM each) are cut down from 8 to 2; 2 are enough for one node and leave CPU slots and host memory to the trainer and the rollout.
 python3 -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
@@ -48,14 +49,14 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.actor.ppo_mini_batch_size=32 \
     actor_rollout_ref.actor.use_dynamic_bsz=True \
-    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=24576 \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=16384 \
     actor_rollout_ref.actor.use_kl_loss=True \
     actor_rollout_ref.actor.kl_loss_coef=0.001 \
     actor_rollout_ref.actor.kl_loss_type=low_var_kl \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.ref.strategy=fsdp2 \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=True \
-    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=24576 \
+    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=16384 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.nnodes=1 \
     actor_rollout_ref.rollout.n_gpus_per_node=1 \
@@ -63,7 +64,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.85 \
     actor_rollout_ref.rollout.n=5 \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=True \
-    actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=24576 \
+    actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=16384 \
     actor_rollout_ref.rollout.checkpoint_engine.backend=nccl \
     actor_rollout_ref.rollout.checkpoint_engine.update_weights_bucket_megabytes=1024 \
     actor_rollout_ref.rollout.agent.agent_loop_config_path=conlang_gym/agent_loop.yaml \
@@ -83,7 +84,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.n_gpus_per_node=2 \
     trainer.val_before_train=True \
     trainer.test_freq=10 \
-    trainer.save_freq=5 \
+    trainer.save_freq=10 \
     trainer.max_actor_ckpt_to_keep=2 \
     trainer.default_local_dir="${PWD}/outputs/ckpts/qwen3_5_2b_${MODE}" \
     trainer.total_epochs=1 \

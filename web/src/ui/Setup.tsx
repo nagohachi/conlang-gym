@@ -152,9 +152,9 @@ export function Setup({ game, onStart }: Props) {
         </div>
         {!custom ? (
           <p class="hint">
-            The model was trained with these settings. Languages differ only in word order, the root
-            dictionary is shown, and there are {TRAINING_CONFIG.budget} questions and{" "}
-            {TRAINING_CONFIG.numTest} test sentences.
+            The model was trained with these settings. Languages differ in word order and in whether
+            plural and past tense take a prefix or a suffix. The root dictionary is shown, and there
+            are {TRAINING_CONFIG.budget} questions and {TRAINING_CONFIG.numTest} test sentences.
           </p>
         ) : (
           <div class="custom-grid">

@@ -457,7 +457,7 @@ describe("solve", () => {
 // Dataset seeds
 
 describe("DATASET_SEEDS", () => {
-  it("matches make_dataset's selection on the seeds up to the last validation seed", () => {
+  it("matches make_dataset's selection on the seeds up to the last validation seed", async () => {
     const config = DATASET_SEEDS.envConfig;
     const valSeen: Record<string, number[]> = {};
     const valUnseen: Record<string, number[]> = {};
@@ -466,6 +466,8 @@ describe("DATASET_SEEDS", () => {
     const lastVal = Math.max(...allVal.flat());
     let numTrain = 0;
     for (let seed = 0; seed <= lastVal; seed++) {
+      // This loop runs for tens of seconds; yielding lets the vitest worker answer its RPC calls.
+      if (seed % 100 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
       let split: string;
       if (solve(seed, config) === null) {
         split = "rejected";

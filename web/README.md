@@ -5,12 +5,12 @@ A static site where a person, or the trained model, plays conlang-gym episodes i
 | Path | Contents |
 |---|---|
 | `src/env/` | TypeScript port of `conlang_gym/language.py` and `solver.py`. A seed gives the same language, prompts, replies, scores and solver result as the Python code |
-| `src/env/dataset_seeds.json` | Which seeds were validation or training data of the published model |
+| `src/env/dataset_seeds.json` | Which seeds were validation or training data of the model on the site |
 | `src/llm/engine.ts` | Greedy decoding of the ONNX model with onnxruntime-web (WebGPU), keeping the KV cache and Gated DeltaNet states between turns |
 | `src/llm/agent.ts` | The agent loop of `conlang_gym/agent_loop.py` (non-thinking mode): the same token stream and token limits as in training |
 | `src/llm/worker.ts` | Web Worker that downloads the model (kept with the Cache API) and runs it |
 | `src/ui/` | The page (Preact) |
-| `scripts/export_onnx.py` | Converts the trained checkpoint to the ONNX files the page loads |
+| `scripts/export_onnx.py` | Converts the trained checkpoint ([v2](https://huggingface.co/nagohachi/Qwen3.5-2B-conlang-gym-v2-plural-past-with-dictionary), word order + plural + past) to the ONNX files the page loads |
 | `tests/` | Parity tests against fixtures dumped from the Python code, and tests of the agent loop |
 
 ## Development
@@ -18,7 +18,7 @@ A static site where a person, or the trained model, plays conlang-gym episodes i
 ```bash
 cd web
 npm ci
-uv run scripts/export_onnx.py --out_dir models/conlang-gym-2b   # once: writes the model (1.4 GB)
+uv run scripts/export_onnx.py --out_dir models/conlang-gym-2b-v2   # once: writes the model (1.4 GB)
 npm run dev
 ```
 
@@ -33,7 +33,7 @@ The fixtures in `tests/fixtures/` and `src/env/dataset_seeds.json` are generated
 
 ```bash
 PYTHONPATH=. python web/scripts/dump_env_fixtures.py
-PYTHONPATH=. python web/scripts/dataset_seeds.py
+PYTHONPATH=. python web/scripts/dataset_seeds.py --active_params plural past   # the v2 model's data
 ```
 
 ## The model files
@@ -47,13 +47,13 @@ uv run scripts/export_onnx.py --check
 The output (`onnx/`, the tokenizer files and `manifest.json` with each file's size and a content version) is 1.40 GB. `scripts/node_generate.ts` runs the same engine on CPU with onnxruntime-node, which is useful for comparing with Python:
 
 ```bash
-npx vite-node scripts/node_generate.ts -- models/conlang-gym-2b prompt.txt 64
+npx vite-node scripts/node_generate.ts -- models/conlang-gym-2b-v2 prompt.txt 64
 ```
 
 ## Deployment
 
 The site is static (`npm run build` writes `dist/`), but the model is too large to ship with it, so it is downloaded from the Hugging Face Hub.
 
-1. Upload `web/models/conlang-gym-2b/` to a model repository, e.g. `hf upload <user>/<repo> web/models/conlang-gym-2b .`.
+1. Upload `web/models/conlang-gym-2b-v2/` to a model repository, e.g. `hf upload <user>/<repo> web/models/conlang-gym-2b-v2 .`.
 2. Point the site at it: `VITE_MODEL_URL=https://huggingface.co/<user>/<repo>/resolve/main/` at build time (the default is in `src/ui/model-store.ts`).
 3. `.github/workflows/pages.yml` builds and publishes the site on GitHub Pages on every push to `main` that touches `web/`. Enable Pages with "GitHub Actions" as the source. Set `VITE_MODEL_URL` as a repository variable if it differs from the default.

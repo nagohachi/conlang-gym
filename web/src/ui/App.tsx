@@ -66,7 +66,8 @@ function HowItWorks() {
         <li>
           You get the nouns and verbs of the language, and by default the root of each. The subject,
           object and verb always appear in the same order, which differs from language to language
-          (SOV, SVO, VSO, VOS, OSV or OVS). On harder settings, words also take affixes.
+          (SOV, SVO, VSO, VOS, OSV or OVS). Plural nouns and past-tense verbs take a prefix or a
+          suffix, and harder settings add more affixes.
         </li>
         <li>
           Each question names a meaning, such as “the dogs chased the cat”, and the informant says it

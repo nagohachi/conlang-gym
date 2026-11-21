@@ -1,10 +1,10 @@
 """Write the seed selection of the published model's dataset to web/src/env/dataset_seeds.json.
 
 It replays conlang_gym/make_dataset.py's selection, without pandas and without writing parquet
-files, for the command in README.md: every flag at its default, so word order only
-(8000 train rows, 64 validation seeds per grammar, unseen grammar fraction 0.2, chunks of 2000
-seeds). Run from the repository root:
-    PYTHONPATH=. python web/scripts/dataset_seeds.py
+files. --active_params selects the data: the site's model (v2) was trained on
+--active_params plural past, every other flag at its default (8000 train rows, 64 validation seeds
+per grammar, unseen grammar fraction 0.2, chunks of 2000 seeds). Run from the repository root:
+    PYTHONPATH=. python web/scripts/dataset_seeds.py --active_params plural past
 The website uses the file to tell which seeds were validation seeds, and which may have been
 trained on: a seed up to lastTrainSeed of a seen grammar that the solver keeps and that is not a
 validation seed is a training seed, and seeds from numCheckedSeeds on were never examined.

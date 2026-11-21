@@ -15,7 +15,7 @@ points, RMSNorm weights stored as 1 + w, the gated norm rounded to bfloat16, A a
 compares every initializer, which shows that the mapping and the quantization are right.
 
 Usage (from the repository root):
-    uv run web/scripts/export_onnx.py --out_dir web/models/conlang-gym-2b
+    uv run web/scripts/export_onnx.py --out_dir web/models/conlang-gym-2b-v2
     uv run web/scripts/export_onnx.py --check
 """
 
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 GRAPH_REPO = "onnx-community/Qwen3.5-2B-ONNX-OPT"
 GRAPH_SOURCE_REPO = "Qwen/Qwen3.5-2B"
-MODEL_REPO = "nagohachi/Qwen3.5-2B-conlang-gym-v1-word-order-with-dictionary"
+MODEL_REPO = "nagohachi/Qwen3.5-2B-conlang-gym-v2-plural-past-with-dictionary"
 ONNX_FILES = ("embed_tokens_q4f16.onnx", "decoder_model_merged_q4f16.onnx")
 TOKENIZER_FILES = ("tokenizer.json", "tokenizer_config.json", "chat_template.jinja")
 BLOCK_SIZE = 32
@@ -247,7 +247,7 @@ def check(graph_dir: Path, source_dir: Path) -> None:
             raise SystemExit(1)
 
 
-def export(graph_dir: Path, model_dir: Path, out_dir: Path) -> None:
+def export(graph_dir: Path, model_dir: Path, out_dir: Path, model_name: str) -> None:
     """Write the ONNX files, tokenizer and configs of the website model to out_dir."""
     reader = SafetensorsReader(find_checkpoint(model_dir))
     (out_dir / "onnx").mkdir(parents=True, exist_ok=True)
@@ -269,10 +269,10 @@ def export(graph_dir: Path, model_dir: Path, out_dir: Path) -> None:
     shutil.copy(model_dir / "generation_config.json", out_dir / "generation_config.json")
     # The graph's config carries transformers.js_config; the architecture is the checkpoint's.
     shutil.copy(graph_dir / "config.json", out_dir / "config.json")
-    write_manifest(out_dir)
+    write_manifest(out_dir, model_name)
 
 
-def write_manifest(out_dir: Path) -> None:
+def write_manifest(out_dir: Path, model_name: str) -> None:
     """Write manifest.json: each file's size, and a version that changes with any file's content.
 
     The website reads the sizes for its progress bar and appends the version to the file URLs, so a
@@ -289,7 +289,7 @@ def write_manifest(out_dir: Path) -> None:
         with path.open("rb") as file:
             digest.update(hashlib.file_digest(file, "sha256").digest())
     manifest = {
-        "model": MODEL_REPO,
+        "model": model_name,
         "graph": GRAPH_REPO,
         "version": digest.hexdigest()[:12],
         "files": {str(p.relative_to(out_dir)): p.stat().st_size for p in files},
@@ -302,7 +302,7 @@ def write_manifest(out_dir: Path) -> None:
 def main() -> None:
     """Export the website model, or check the conversion against the reference files."""
     parser = argparse.ArgumentParser(description="Export the conlang-gym model to ONNX (q4f16).")
-    parser.add_argument("--out_dir", type=Path, default=Path("web/models/conlang-gym-2b"))
+    parser.add_argument("--out_dir", type=Path, default=Path("web/models/conlang-gym-2b-v2"))
     parser.add_argument("--model", default=MODEL_REPO, help="Hub id or local checkpoint directory")
     parser.add_argument("--graph", default=GRAPH_REPO, help="Hub id or local directory")
     parser.add_argument("--check", action="store_true", help="verify against the reference files")
@@ -317,7 +317,7 @@ def main() -> None:
     if args.check:
         check(graph_dir, resolve(args.check_source, ["*.safetensors"]))
         return
-    export(graph_dir, resolve(args.model), args.out_dir)
+    export(graph_dir, resolve(args.model), args.out_dir, args.model)
 
 
 if __name__ == "__main__":

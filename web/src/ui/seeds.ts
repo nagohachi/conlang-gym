@@ -3,8 +3,11 @@ import { DATASET_SEEDS, datasetSplitOf, type EnvConfig, makeEnvConfig, PY_CONFIG
 
 export type Mode = "human" | "model";
 
-/** The published model's data: make_dataset.py with every flag at its default (word order only). */
-export const TRAINING_CONFIG: EnvConfig = makeEnvConfig({ activeParams: [] });
+/**
+ * The data of the model on the site (v2): make_dataset.py --active_params plural past, the rest at
+ * defaults, so languages differ in word order and in whether plural and past are prefixes or suffixes.
+ */
+export const TRAINING_CONFIG: EnvConfig = makeEnvConfig({ activeParams: ["plural", "past"] });
 
 export function sameConfig(a: EnvConfig, b: EnvConfig): boolean {
   // Parameter lists are compared as sets: their order does not change the languages.
@@ -34,7 +37,7 @@ export interface SeedInfo {
   solverQuestions: number | null;
   /** How the seed relates to the training data, without giving the grammar away. */
   training: string;
-  /** The same, possibly naming the word order (for after the test). */
+  /** The same, possibly saying whether its grammar occurs in training (for after the test). */
   trainingAfter: string;
 }
 
@@ -49,13 +52,13 @@ export function describeSeed(seed: number, config: EnvConfig): SeedInfo {
       return {
         solverQuestions,
         training: "This language is in the held-out validation set.",
-        trainingAfter: "A held-out validation language; its word order also occurs in training.",
+        trainingAfter: "A held-out validation language. Its grammar also occurs in the training data.",
       };
     case "val_unseen":
       return {
         solverQuestions,
         training: "This language is in the held-out validation set.",
-        trainingAfter: "A held-out validation language whose word order never occurs in training.",
+        trainingAfter: "A held-out validation language. No training language has its grammar.",
       };
     case "rejected":
       return same("The dataset skipped this language, so the model never saw it.");

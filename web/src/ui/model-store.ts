@@ -7,10 +7,10 @@ import { LlmClient, type LoadProgress } from "../llm/client";
 export const MODEL_URL: string =
   import.meta.env.VITE_MODEL_URL ||
   (import.meta.env.DEV
-    ? `${import.meta.env.BASE_URL}models/conlang-gym-2b/`
-    : "https://huggingface.co/nagohachi/Qwen3.5-2B-conlang-gym-v1-word-order-with-dictionary-ONNX/resolve/main/");
+    ? `${import.meta.env.BASE_URL}models/conlang-gym-2b-v2/`
+    : "https://huggingface.co/nagohachi/Qwen3.5-2B-conlang-gym-v2-plural-past-with-dictionary-ONNX/resolve/main/");
 
-export const MODEL_REPO = "nagohachi/Qwen3.5-2B-conlang-gym-v1-word-order-with-dictionary";
+export const MODEL_REPO = "nagohachi/Qwen3.5-2B-conlang-gym-v2-plural-past-with-dictionary";
 
 export type ModelStatus = "unchecked" | "unsupported" | "idle" | "loading" | "ready" | "error";
 

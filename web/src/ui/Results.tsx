@@ -39,6 +39,12 @@ function describeGrammar(episode: Episode): string[] {
   return lines;
 }
 
+/** "item 3", "items 3 and 5", "items 2, 3 and 5". */
+function itemList(ids: number[]): string {
+  if (ids.length === 1) return `item ${ids[0]}`;
+  return `items ${ids.slice(0, -1).join(", ")} and ${ids[ids.length - 1]}`;
+}
+
 export function Results({
   episode,
   grade,
@@ -51,6 +57,7 @@ export function Results({
   children?: ComponentChildren;
 }) {
   const { score, items } = grade;
+  const askedIds = items.filter((item) => !item.scorable).map((item) => item.id);
   const percent = Math.round(score.reward * 100);
   const training = describeSeed(Number(episode.seed), episode.config).trainingAfter;
   return (
@@ -64,6 +71,12 @@ export function Results({
       {score.testTruncated ? (
         <p class="warn-text">The answer ran past the token limit, so it scores 0.</p>
       ) : null}
+      {askedIds.length > 0 && (
+        <p class="hint">
+          {who} asked about {itemList(askedIds)} during the questions, so{" "}
+          {askedIds.length === 1 ? "it is" : "they are"} not scored.
+        </p>
+      )}
       <div class="table-scroll">
         <table class="grade-table">
           <thead>

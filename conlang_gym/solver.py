@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 
 from .language import (
+    OPTIONAL_PARAMS,
     PARAM_CHOICES,
     EnvConfig,
     Grammar,
@@ -35,6 +36,19 @@ ALL_GRAMMARS: tuple[Grammar, ...] = tuple(
 _build_template_cached = lru_cache(maxsize=500_000)(build_sentence_template)
 
 
+@lru_cache(maxsize=16)
+def _list_grammars(params: frozenset[str]) -> tuple[Grammar, ...]:
+    """Return the grammars of ALL_GRAMMARS whose switched-on parameters are all in params.
+
+    It is module-level so that the result is cached across seeds.
+    """
+    return tuple(
+        grammar
+        for grammar in ALL_GRAMMARS
+        if all(getattr(grammar, p) == "none" for p in OPTIONAL_PARAMS if p not in params)
+    )
+
+
 @dataclass
 class Hypothesis:
     """A grammar that fits every observation so far, with the morpheme forms they fix.
@@ -49,10 +63,13 @@ class Hypothesis:
 class HypothesisSolver:
     """The grammars that are consistent with the observations of one language."""
 
-    def __init__(self, known_roots: dict[str, str] | None) -> None:
-        """Start from every canonical grammar; known_roots is None if the dictionary is hidden."""
-        self.known_roots = known_roots
-        self.hypotheses = [Hypothesis(grammar) for grammar in ALL_GRAMMARS]
+    def __init__(self, known_roots: dict[str, str] | None, grammars: tuple[Grammar, ...]) -> None:
+        """Start from grammars; known_roots is the root dictionary (None if it is hidden).
+
+        A root missing from known_roots (a verb's second stem) is read off the observations.
+        """
+        self.known_roots = known_roots or {}
+        self.hypotheses = [Hypothesis(grammar) for grammar in grammars]
 
     def observe(self, meaning: Meaning, sentence: str) -> None:
         """Drop the hypotheses that cannot produce sentence for meaning and extend the others."""
@@ -75,7 +92,7 @@ class HypothesisSolver:
                     if morpheme.is_root
                 )
                 for morpheme, piece in zip(word_template, pieces, strict=True):
-                    if morpheme.is_root and self.known_roots is not None:
+                    if morpheme.is_root and morpheme.name in self.known_roots:
                         expected = self.known_roots[morpheme.name]
                     elif not morpheme.is_root and harmony == "copy":
                         if piece[1] != root_piece[-1]:
@@ -114,10 +131,7 @@ class HypothesisSolver:
             words = []
             for word_template in template:
                 root_name = next(morpheme.name for morpheme in word_template if morpheme.is_root)
-                if self.known_roots is not None:
-                    root = self.known_roots[root_name]
-                else:
-                    root = bindings.get(Morpheme(True, root_name))
+                root = self.known_roots.get(root_name, bindings.get(Morpheme(True, root_name)))
                 pieces = []
                 for morpheme in word_template:
                     if morpheme.is_root:
@@ -173,7 +187,12 @@ def solve(seed: int, config: EnvConfig, num_candidates: int = 48) -> int | None:
     only make it unscorable.
     """
     language, tests = generate(seed, config)
-    solver = HypothesisSolver(dict(language.roots) if config.show_dictionary else None)
+    concepts = language.nouns + language.transitive + language.intransitive
+    dictionary = {concept: language.roots[concept] for concept in concepts}
+    solver = HypothesisSolver(
+        dictionary if config.show_dictionary else None,
+        _list_grammars(frozenset(config.solver_params)),
+    )
     rng = random.Random(seed * 7919 + 1)
     test_set = set(tests)
     pool = [meaning for meaning in language.list_meanings() if meaning not in test_set]

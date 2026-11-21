@@ -71,7 +71,8 @@ def main() -> None:
             f"{p}-{getattr(grammar, p)}" for p in OPTIONAL_PARAMS if getattr(grammar, p) != "none"
         ]
         parts = [grammar.word_order, *active]
-        if grammar.object_marking == "suffix" and grammar.plural == "suffix":
+        has_case_suffix = "suffix" in (grammar.object_marking, grammar.ergative_marking)
+        if has_case_suffix and grammar.plural == "suffix":
             parts.append(grammar.plural_case_order)
         return "_".join(parts)
 

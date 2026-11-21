@@ -27,10 +27,29 @@ PARAM_CHOICES = {
     "past": ("none", "suffix", "prefix"),
     "subject_agreement": ("none", "suffix"),
     "vowel_harmony": ("none", "copy"),
+    "ergative_marking": ("none", "suffix"),
+    "object_plural": ("none", "distinct"),
+    "verb_number_stem": ("none", "subject", "absolutive"),
 }
 # Parameters that can be switched on in addition to word order, which is always active.
-OPTIONAL_PARAMS = ("object_marking", "plural", "past", "subject_agreement", "vowel_harmony")
+OPTIONAL_PARAMS = (
+    "object_marking",
+    "plural",
+    "past",
+    "subject_agreement",
+    "vowel_harmony",
+    "ergative_marking",
+    "object_plural",
+    "verb_number_stem",
+)
+# Parameters that put an affix on a word; vowel harmony is only visible with one of them.
+AFFIX_PARAMS = ("object_marking", "plural", "past", "subject_agreement", "ergative_marking")
+# Affixes every language has a form for, whether or not its grammar uses them.
 AFFIX_NAMES = ("plural", "object", "past", "agreement")
+# Affixes a language has only when its grammar uses them, with the parameter that does.
+EXTRA_AFFIX_PARAMS = {"ergative": "ergative_marking", "object_plural": "object_plural"}
+# Key of a verb's second stem in Language.roots, used under verb_number_stem.
+PLURAL_STEM_KEY = "{verb}.plural"
 
 TRANSITIVE_SLOTS = ("Subject", "SubjectNumber", "Object", "ObjectNumber", "Verb", "Tense")
 INTRANSITIVE_SLOTS = ("Subject", "SubjectNumber", "Verb", "Tense")
@@ -47,7 +66,14 @@ _ANSWER_RE = re.compile(r'<answer id="(\d+)">(.*?)</answer>', re.DOTALL)
 
 @dataclass(frozen=True)
 class Grammar:
-    """One value per grammatical parameter (spec 3.3); "none" switches a parameter off."""
+    """One value per grammatical parameter (spec 3.3); "none" switches a parameter off.
+
+    A is the subject of a transitive verb, S the subject of an intransitive verb and O the object.
+    object_marking puts a case suffix on O and ergative_marking one on A (with both, the marking is
+    tripartite). object_plural gives O its own plural affix, in the position plural gives. Under
+    verb_number_stem the verb has a second stem, used when the subject (S or A) is plural, or when
+    the absolutive argument (S or O) is plural.
+    """
 
     word_order: str = "SVO"
     object_marking: str = "none"
@@ -56,22 +82,21 @@ class Grammar:
     past: str = "none"
     subject_agreement: str = "none"
     vowel_harmony: str = "none"
+    ergative_marking: str = "none"
+    object_plural: str = "none"
+    verb_number_stem: str = "none"
 
     def has_affix(self) -> bool:
         """Return whether any parameter puts an affix on a word."""
-        return (
-            self.object_marking != "none"
-            or self.plural != "none"
-            or self.past != "none"
-            or self.subject_agreement != "none"
-        )
+        return any(getattr(self, p) != "none" for p in AFFIX_PARAMS)
 
     def to_canonical(self) -> "Grammar":
         """Return the grammar with the parameters that cannot affect a realization reset.
 
         Two canonical grammars are equal exactly when they realize every meaning the same way.
         """
-        order_matters = self.object_marking == "suffix" and self.plural == "suffix"
+        has_case_suffix = "suffix" in (self.object_marking, self.ergative_marking)
+        order_matters = has_case_suffix and self.plural == "suffix"
         return Grammar(
             word_order=self.word_order,
             object_marking=self.object_marking,
@@ -80,6 +105,9 @@ class Grammar:
             past=self.past,
             subject_agreement=self.subject_agreement,
             vowel_harmony=self.vowel_harmony if self.has_affix() else "none",
+            ergative_marking=self.ergative_marking,
+            object_plural=self.object_plural if self.plural != "none" else "none",
+            verb_number_stem=self.verb_number_stem,
         )
 
 
@@ -89,7 +117,9 @@ class EnvConfig:
 
     active_params names the parameters switched on in every language, besides word order; each one
     takes a random non-"none" value per seed (e.g. past is a suffix in some languages and a prefix
-    in others).
+    in others). solver_params names the parameters the solver treats as possibly switched on when
+    it checks that a seed can be solved (spec 8); the default, the five parameters of spec v0.1,
+    reproduces the data of the published models.
     """
 
     num_nouns: int = 4
@@ -101,6 +131,13 @@ class EnvConfig:
     budget: int = 6
     num_test: int = 8
     num_compositional: int = 4
+    solver_params: tuple[str, ...] = (
+        "object_marking",
+        "plural",
+        "past",
+        "subject_agreement",
+        "vowel_harmony",
+    )
 
     def __post_init__(self) -> None:
         """Check that the settings can generate an episode."""
@@ -118,19 +155,33 @@ class EnvConfig:
         require("budget", 1, None)
         require("num_test", 1, None)
         require("num_compositional", 0, self.num_test)
-        # JSON round trips (extra_info) turn the tuple into a list.
-        object.__setattr__(self, "active_params", tuple(self.active_params))
-        unknown = sorted(set(self.active_params) - set(OPTIONAL_PARAMS))
-        if unknown:
+        for name in ("active_params", "solver_params"):
+            # JSON round trips (extra_info) turn the tuple into a list.
+            object.__setattr__(self, name, tuple(getattr(self, name)))
+            params = getattr(self, name)
+            unknown = sorted(set(params) - set(OPTIONAL_PARAMS))
+            if unknown:
+                raise ValueError(
+                    f"EnvConfig.{name}: unknown {unknown}; choose from {list(OPTIONAL_PARAMS)}"
+                )
+            if len(set(params)) != len(params):
+                raise ValueError(f"EnvConfig.{name}={params}: has duplicates")
+        active = set(self.active_params)
+        if "vowel_harmony" in active and not active & set(AFFIX_PARAMS):
             raise ValueError(
-                f"EnvConfig.active_params: unknown {unknown}; choose from {list(OPTIONAL_PARAMS)}"
+                f"EnvConfig.active_params={self.active_params}: vowel harmony only changes affix "
+                f"vowels, so it needs one of {list(AFFIX_PARAMS)} as well"
             )
-        if len(set(self.active_params)) != len(self.active_params):
-            raise ValueError(f"EnvConfig.active_params={self.active_params}: has duplicates")
-        if set(self.active_params) == {"vowel_harmony"}:
+        if "object_plural" in active and "plural" not in active:
             raise ValueError(
-                "EnvConfig.active_params=('vowel_harmony',): vowel harmony only changes affix "
-                "vowels, so it needs an affix parameter as well"
+                f"EnvConfig.active_params={self.active_params}: object_plural changes the plural "
+                "affix of objects, so it needs plural as well"
+            )
+        missing = sorted(active - set(self.solver_params))
+        if missing:
+            raise ValueError(
+                f"EnvConfig.solver_params={self.solver_params}: misses active parameters "
+                f"{missing}, so the solver could never confirm the true grammar"
             )
 
 
@@ -168,7 +219,7 @@ class Meaning(NamedTuple):
 
 
 class Morpheme(NamedTuple):
-    """A slot of a word: a root (name is a concept) or an affix (name is one of AFFIX_NAMES)."""
+    """A slot of a word: a root (name is a key of Language.roots) or an affix (name is an affix)."""
 
     is_root: bool
     name: str
@@ -180,7 +231,11 @@ type Template = list[Word]
 
 @dataclass(frozen=True)
 class Language:
-    """A generated language: its grammar, the vocabulary of its survey sheet and its morphemes."""
+    """A generated language: its grammar, the vocabulary of its survey sheet and its morphemes.
+
+    roots maps each concept to its root and, under verb_number_stem, each verb's PLURAL_STEM_KEY to
+    its second stem.
+    """
 
     grammar: Grammar
     nouns: tuple[str, ...]
@@ -231,15 +286,23 @@ def build_sentence_template(grammar: Grammar, meaning: Meaning) -> Template:
     it has inferred from observations.
     """
 
-    def build_noun(concept: str, number: str, is_object: bool) -> Word:
+    def build_noun(concept: str, number: str, role: str) -> Word:
         plural = number == "plural"
-        prefixes = ["plural"] if plural and grammar.plural == "prefix" else []
-        suffixes = ["plural"] if plural and grammar.plural == "suffix" else []
-        if is_object and grammar.object_marking == "suffix":
+        plural_affix = "plural"
+        if role == "O" and grammar.object_plural == "distinct":
+            plural_affix = "object_plural"
+        prefixes = [plural_affix] if plural and grammar.plural == "prefix" else []
+        suffixes = [plural_affix] if plural and grammar.plural == "suffix" else []
+        case = None
+        if role == "O" and grammar.object_marking == "suffix":
+            case = "object"
+        if role == "A" and grammar.ergative_marking == "suffix":
+            case = "ergative"
+        if case is not None:
             if grammar.plural_case_order == "case_first":
-                suffixes.insert(0, "object")
+                suffixes.insert(0, case)
             else:
-                suffixes.append("object")
+                suffixes.append(case)
         return (
             [Morpheme(False, name) for name in prefixes]
             + [Morpheme(True, concept)]
@@ -253,14 +316,21 @@ def build_sentence_template(grammar: Grammar, meaning: Meaning) -> Template:
         verb_suffixes.append("past")
     if meaning.subject_number == "plural" and grammar.subject_agreement == "suffix":
         verb_suffixes.append("agreement")
+    absolutive_number = meaning.object_number if meaning.transitive else meaning.subject_number
+    plural_stem = (
+        grammar.verb_number_stem == "subject" and meaning.subject_number == "plural"
+    ) or (grammar.verb_number_stem == "absolutive" and absolutive_number == "plural")
+    stem = PLURAL_STEM_KEY.format(verb=meaning.verb) if plural_stem else meaning.verb
     words = {
-        "S": build_noun(meaning.subject, meaning.subject_number, False),
+        "S": build_noun(
+            meaning.subject, meaning.subject_number, "A" if meaning.transitive else "S"
+        ),
         "V": [Morpheme(False, name) for name in verb_prefixes]
-        + [Morpheme(True, meaning.verb)]
+        + [Morpheme(True, stem)]
         + [Morpheme(False, name) for name in verb_suffixes],
     }
     if meaning.transitive:
-        words["O"] = build_noun(meaning.object, meaning.object_number, True)
+        words["O"] = build_noun(meaning.object, meaning.object_number, "O")
         return [words[role] for role in grammar.word_order]
     subject_first = grammar.word_order.index("S") < grammar.word_order.index("V")
     return [words["S"], words["V"]] if subject_first else [words["V"], words["S"]]
@@ -289,21 +359,36 @@ def generate(seed: int, config: EnvConfig) -> tuple[Language, list[Meaning]]:
 
     # Affixes and roots draw from disjoint consonant sets: every morpheme differs, and an affix
     # syllable never occurs inside a root, so morpheme boundaries are unique (roots have two CV
-    # syllables, affixes one).
+    # syllables, affixes one). Extra affixes take the last consonants and draw after the others,
+    # so grammars without them get the same forms as before the extra affixes existed.
+    extra_affixes = [
+        name for name, param in EXTRA_AFFIX_PARAMS.items() if getattr(grammar, param) != "none"
+    ]
     consonants = rng.sample(CONSONANTS, len(CONSONANTS))
-    affix_consonants = consonants[: len(AFFIX_NAMES)]
-    root_consonants = consonants[len(AFFIX_NAMES) :]
+    num_root_consonants = len(CONSONANTS) - len(AFFIX_NAMES) - len(extra_affixes)
+    root_consonants = consonants[len(AFFIX_NAMES) : len(AFFIX_NAMES) + num_root_consonants]
+    affix_names = AFFIX_NAMES + tuple(extra_affixes)
+    affix_consonants = (
+        consonants[: len(AFFIX_NAMES)] + consonants[len(consonants) - len(extra_affixes) :]
+    )
     affixes = {
         name: consonant + rng.choice(VOWELS)
-        for name, consonant in zip(AFFIX_NAMES, affix_consonants, strict=True)
+        for name, consonant in zip(affix_names, affix_consonants, strict=True)
     }
     roots: dict[str, str] = {}
-    for concept in nouns + transitive + intransitive:
+
+    def add_root(key: str) -> None:
         while True:
             form = "".join(rng.choice(root_consonants) + rng.choice(VOWELS) for _ in range(2))
             if form not in roots.values():
                 break
-        roots[concept] = form
+        roots[key] = form
+
+    for concept in nouns + transitive + intransitive:
+        add_root(concept)
+    if grammar.verb_number_stem != "none":
+        for verb in transitive + intransitive:
+            add_root(PLURAL_STEM_KEY.format(verb=verb))
     language = Language(grammar, nouns, transitive, intransitive, roots, affixes)
 
     meanings = language.list_meanings()

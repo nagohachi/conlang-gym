@@ -7,6 +7,7 @@ language's own realization, so no human or LLM grading is needed.
 
 import random
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, NamedTuple
 
@@ -62,6 +63,17 @@ _ACTION_RE = re.compile(r"<action>(.*?)</action>", re.DOTALL)
 _ASK_RE = re.compile(r"^ask\((.*)\)$", re.DOTALL)
 _JUDGE_RE = re.compile(r'^judge\(\s*"(.*)"\s*\)$', re.DOTALL)
 _ANSWER_RE = re.compile(r'<answer id="(\d+)">(.*?)</answer>', re.DOTALL)
+
+# Conditions an investigation can cover; EpisodeScore.coverage is the fraction of them that occur
+# in at least one asked meaning. Each pairs a marked feature with a verb type, since a language may
+# mark a feature differently on transitive and intransitive sentences.
+COVERAGE_CONDITIONS: dict[str, Callable[["Meaning"], bool]] = {
+    "transitive_plural_subject": lambda m: m.transitive and m.subject_number == "plural",
+    "transitive_plural_object": lambda m: m.transitive and m.object_number == "plural",
+    "transitive_past": lambda m: m.transitive and m.tense == "past",
+    "intransitive_plural_subject": lambda m: not m.transitive and m.subject_number == "plural",
+    "intransitive_past": lambda m: not m.transitive and m.tense == "past",
+}
 
 
 @dataclass(frozen=True)
@@ -419,9 +431,10 @@ class ParsedAction:
 
 @dataclass(frozen=True)
 class EpisodeScore:
-    """Reward of an episode (spec 7) and the counts that verl logs with it."""
+    """Reward of an episode (spec 7) and the measures that verl logs with it."""
 
     reward: float
+    coverage: float  # fraction of COVERAGE_CONDITIONS covered by the asked meanings
     num_asks: int
     num_judges: int
     num_invalid: int
@@ -616,8 +629,13 @@ class Episode:
                 normalize(answers.get(item_id, "")) == self.language.realize(meaning)
                 for item_id, meaning in scored.items()
             )
+        num_covered = sum(
+            any(condition(meaning) for meaning in self.asked)
+            for condition in COVERAGE_CONDITIONS.values()
+        )
         return EpisodeScore(
             reward=num_correct / len(scored) if scored else 0.0,
+            coverage=num_covered / len(COVERAGE_CONDITIONS),
             num_asks=self.num_asks,
             num_judges=self.num_judges,
             num_invalid=self.num_invalid,

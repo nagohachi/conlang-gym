@@ -67,6 +67,7 @@ class ConlangGymAgentLoop(AgentLoopBase):
         test_max_tokens: int = 512,
         think_budget_turn: int = 0,
         think_budget_test: int = 0,
+        coverage_weight: float = 0.0,
     ) -> None:
         """Set the token limits of the turns.
 
@@ -79,6 +80,10 @@ class ConlangGymAgentLoop(AgentLoopBase):
         a fixed closing sentence and </think> (the thinking-budget scheme of the Qwen3 technical
         report) and the model then writes the visible part within turn/test_max_tokens. The
         appended tokens are the environment's, so they get response_mask 0.
+
+        A nonzero coverage_weight adds coverage_weight x EpisodeScore.coverage to the reward, which
+        rewards investigations that ask about every condition; the test accuracy stays in
+        reward_extra_info as accuracy.
         """
         super().__init__(
             trainer_config,
@@ -93,6 +98,7 @@ class ConlangGymAgentLoop(AgentLoopBase):
         self.test_max_tokens = test_max_tokens
         self.think_budget_turn = think_budget_turn
         self.think_budget_test = think_budget_test
+        self.coverage_weight = coverage_weight
         self.response_length = self.rollout_config.response_length
         self.think_end_id = self.tokenizer.convert_tokens_to_ids("</think>")
         self.force_answer_ids = self.tokenizer.encode(_FORCE_ANSWER_TEXT, add_special_tokens=False)
@@ -214,9 +220,10 @@ class ConlangGymAgentLoop(AgentLoopBase):
         response_ids = (
             token_ids[len(token_ids) - num_response_tokens :] if num_response_tokens else []
         )
-        # The trainer records the reward itself under "reward".
+        # The trainer records the reward itself under "reward", so the accuracy is renamed.
         reward_extra_info = {
-            name: value for name, value in asdict(score).items() if name != "reward"
+            ("accuracy" if name == "reward" else name): value
+            for name, value in asdict(score).items()
         }
         logprobs = trajectory.response_logprobs
         return AgentLoopOutput(
@@ -224,7 +231,7 @@ class ConlangGymAgentLoop(AgentLoopBase):
             response_ids=response_ids[: self.response_length],
             response_mask=response_mask[: self.response_length],
             response_logprobs=logprobs[: self.response_length] if logprobs else None,
-            reward_score=score.reward,
+            reward_score=score.reward + self.coverage_weight * score.coverage,
             num_turns=num_assistant_turns + num_user_turns + 1,
             metrics=metrics,
             extra_fields={

@@ -16,3 +16,11 @@
   think_budget_test: 1024
   turn_max_tokens: 128
   test_max_tokens: 512
+# conlang_gym_agent plus a reward for covering every condition in the investigation
+# (coverage_weight x EpisodeScore.coverage), to test whether that habit transfers to languages with
+# phenomena never seen in training.
+- name: conlang_gym_agent_coverage
+  _target_: conlang_gym.agent_loop.ConlangGymAgentLoop
+  turn_max_tokens: 512
+  test_max_tokens: 2048
+  coverage_weight: 0.2

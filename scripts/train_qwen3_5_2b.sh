@@ -7,7 +7,7 @@
 # Validation has two files: val_seen (training word orders, held-out seeds) and val_unseen (a word order never seen in training). Metrics are per data_source, i.e. per split and word order:
 #   val-core/conlang_gym_val_seen_<order>/reward/mean@1, val-core/conlang_gym_val_unseen_<order>/reward/mean@1
 # A checkpoint every 5 steps (2 kept) lets an interrupted run resume (trainer.resume_mode=auto).
-# The argument picks Qwen3.5's thinking mode (think) or not (nothink). Ray hands out the visible GPUs in order and creates the trainer pool first, so the first two visible GPUs train and the third rolls out:
+# The argument picks Qwen3.5's thinking mode (think) or not (nothink); coverage is nothink with a reward for asking about every condition (conlang_gym_agent_coverage in conlang_gym/agent_loop.yaml). Ray hands out the visible GPUs in order and creates the trainer pool first, so the first two visible GPUs train and the third rolls out:
 #   bash scripts/train_qwen3_5_2b.sh nothink
 set -xeuo pipefail
 
@@ -16,8 +16,9 @@ set -xeuo pipefail
 MODE=$1
 case "${MODE}" in
     nothink) THINKING=False; AGENT=conlang_gym_agent; RESPONSE_LENGTH=6144 ;;        # 7 x 542 + 260 + 2,048 = 6,102
+    coverage) THINKING=False; AGENT=conlang_gym_agent_coverage; RESPONSE_LENGTH=6144 ;;  # nothink + coverage reward
     think) THINKING=True; AGENT=conlang_gym_agent_think; RESPONSE_LENGTH=7168 ;;     # 7 x (512+22+128+30) + 260 + 1,024+22+512 = 6,662
-    *) echo "usage: $0 nothink|think" >&2; exit 1 ;;
+    *) echo "usage: $0 nothink|think|coverage" >&2; exit 1 ;;
 esac
 
 # Ray workers import the agent loop as conlang_gym.agent_loop.
